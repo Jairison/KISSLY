@@ -79,6 +79,9 @@ function RootNavigator() {
           <Stack.Screen name="filters" options={{ presentation: 'modal' }} />
           <Stack.Screen name="match/[id]" options={{ presentation: 'transparentModal', animation: 'fade' }} />
           <Stack.Screen name="delete-account" options={{ animation: 'slide_from_right' }} />
+          <Stack.Screen name="chat/[matchId]" options={{ animation: 'slide_from_right' }} />
+          <Stack.Screen name="person/[matchId]" options={{ presentation: 'modal' }} />
+          <Stack.Screen name="report/[matchId]" options={{ presentation: 'modal' }} />
         </Stack.Protected>
 
         {/* Sempre acessíveis: abertas por links de e-mail e pelo login social */}

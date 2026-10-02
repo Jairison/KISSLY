@@ -13,12 +13,19 @@ matches entre pessoas de verdade. Leva uns 10 minutos.
 
 ## 2. Criar as tabelas
 
-1. No menu lateral, abra **SQL Editor** e clique em **New query**.
-2. Copie todo o conteúdo de [`migrations/20261001000000_init.sql`](migrations/20261001000000_init.sql),
-   cole no editor e clique em **Run**. Deve aparecer `Success. No rows returned`.
+No menu lateral, abra **SQL Editor**. Rode cada arquivo da pasta [`migrations`](migrations), **um de cada
+vez e nesta ordem**: clique em **New query**, cole o conteúdo inteiro do arquivo e clique em **Run**. Em cada
+um deve aparecer `Success. No rows returned`.
 
-Isso cria os perfis, as preferências, os planos, os swipes e os matches, com as regras de segurança
-(Row Level Security) e o espaço para as fotos.
+1. [`20261001000000_init.sql`](migrations/20261001000000_init.sql): perfis, preferências, planos, swipes,
+   matches, regras de segurança (Row Level Security) e o espaço para as fotos.
+2. [`20261002000000_chat.sql`](migrations/20261002000000_chat.sql): mensagens com entrega em tempo real,
+   confirmação de leitura, desfazer match e denúncias.
+
+Quando novas partes do app trouxerem arquivos novos nessa pasta, rode só os novos, também em ordem.
+
+**Denúncias:** ficam na tabela `reports`, que você vê em **Table Editor**. Revise as que têm
+`status = open`. Um app de namoro precisa responder às denúncias rapidamente; isso também é exigido pelas lojas.
 
 ### Opcional: perfis de demonstração
 

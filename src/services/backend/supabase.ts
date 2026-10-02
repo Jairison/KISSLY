@@ -6,6 +6,7 @@ import * as WebBrowser from 'expo-web-browser';
 import type { AuthError, PostgrestError, SupabaseClient } from '@supabase/supabase-js';
 
 import { flagFor } from '@/data/catalog';
+import type { Conversation, Message } from '@/types/chat';
 import { supabase as client } from '@/lib/supabase';
 import {
   DEFAULT_PREFS,
@@ -22,6 +23,10 @@ import { BackendError, type Account, type Backend, type ProfileDraft } from './t
 WebBrowser.maybeCompleteAuthSession();
 
 const BUCKET = 'photos';
+const PAGE_SIZE = 30;
+
+/** Id de quem está logado, para saber de quem é cada mensagem do Realtime. */
+let currentUserId: string | null = null;
 const PUBLIC_PREFIX = `/storage/v1/object/public/${BUCKET}/`;
 
 // ------------------------------------------------------------- erros
@@ -131,6 +136,43 @@ const toCard = (row: CardRow): Profile => ({
   distanceKm: row.distance_km ?? null,
 });
 
+type MessageRow = {
+  id: string;
+  match_id: string;
+  sender_id: string;
+  body: string;
+  created_at: string;
+  read_at: string | null;
+};
+
+const toMessage = (row: MessageRow): Message => ({
+  id: row.id,
+  matchId: row.match_id,
+  senderId: row.sender_id,
+  body: row.body,
+  createdAt: row.created_at,
+  readAt: row.read_at,
+});
+
+type ConversationRow = CardRow & {
+  match_id: string;
+  matched_at: string;
+  last_message: string | null;
+  last_message_at: string | null;
+  last_from_me: boolean | null;
+  unread: number;
+};
+
+const toConversation = (row: ConversationRow): Conversation => ({
+  matchId: row.match_id,
+  matchedAt: row.matched_at,
+  profile: toCard(row),
+  lastMessage: row.last_message,
+  lastMessageAt: row.last_message_at,
+  lastFromMe: Boolean(row.last_from_me),
+  unread: row.unread,
+});
+
 function toRow(draft: Partial<ProfileDraft>) {
   const row: Record<string, unknown> = {};
   if (draft.name !== undefined) row.name = draft.name;
@@ -214,6 +256,7 @@ export const supabaseBackend: Backend = {
   onAuthChange(callback) {
     const { data } = db().auth.onAuthStateChange((_event, session) => {
       const account = session ? { id: session.user.id, email: session.user.email ?? '' } : null;
+      currentUserId = account?.id ?? null;
       // O Supabase pede para não chamar outras funções dele dentro deste callback.
       setTimeout(() => callback(account), 0);
     });
@@ -233,6 +276,7 @@ export const supabaseBackend: Backend = {
   async signIn(email, password) {
     const { data, error } = await db().auth.signInWithPassword({ email: email.trim(), password });
     if (error) fail(error);
+    currentUserId = data.user.id;
     return { id: data.user.id, email: data.user.email ?? email };
   },
 
@@ -364,13 +408,14 @@ export const supabaseBackend: Backend = {
   async swipe(target, direction) {
     const { data, error } = await db().rpc('swipe', { p_target: target.id, p_direction: direction });
     if (error) fail(error);
-    return { matched: Boolean((data as { matched: boolean }[])[0]?.matched) };
+    const row = (data as { matched: boolean; match_id: string | null }[])[0];
+    return { matched: Boolean(row?.matched), matchId: row?.match_id ?? null };
   },
 
-  async fetchMatches() {
+  async fetchConversations() {
     const { data, error } = await db().rpc('get_matches');
     if (error) fail(error);
-    return (data as CardRow[]).map(toCard);
+    return (data as ConversationRow[]).map(toConversation);
   },
 
   async likesYouCount() {
@@ -383,5 +428,90 @@ export const supabaseBackend: Backend = {
     const { data, error } = await db().rpc('get_likes_you');
     if (error) fail(error);
     return (data as CardRow[]).map(toCard);
+  },
+
+  // ------------------------------------------------------------- chat
+
+  async fetchMessages(matchId, before) {
+    let query = db()
+      .from('messages')
+      .select('*')
+      .eq('match_id', matchId)
+      .order('created_at', { ascending: false })
+      .limit(PAGE_SIZE);
+    if (before) query = query.lt('created_at', before);
+    const { data, error } = await query;
+    if (error) fail(error);
+    return (data as MessageRow[]).map(toMessage);
+  },
+
+  async sendMessage({ id, matchId, body }) {
+    const { data, error } = await db()
+      .from('messages')
+      .insert({ id, match_id: matchId, body })
+      .select('*')
+      .single<MessageRow>();
+    if (error) fail(error);
+    return toMessage(data);
+  },
+
+  async markRead(matchId) {
+    const { error } = await db().rpc('mark_read', { p_match: matchId });
+    if (error) fail(error);
+  },
+
+  openChat(matchId, events) {
+    const filter = `match_id=eq.${matchId}`;
+    const channel = db()
+      .channel(`chat:${matchId}`, { config: { broadcast: { self: false } } })
+      .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'messages', filter }, (payload) =>
+        events.onMessage(toMessage(payload.new as MessageRow)),
+      )
+      .on('postgres_changes', { event: 'UPDATE', schema: 'public', table: 'messages', filter }, (payload) => {
+        const row = payload.new as MessageRow;
+        if (row.read_at) events.onRead([row.id], row.read_at);
+      })
+      .on('broadcast', { event: 'typing' }, () => events.onTyping())
+      .subscribe();
+
+    let lastTyping = 0;
+    return {
+      sendTyping: () => {
+        // No máximo um aviso a cada 2 s, para não sobrecarregar o canal.
+        if (Date.now() - lastTyping < 2000) return;
+        lastTyping = Date.now();
+        channel.send({ type: 'broadcast', event: 'typing', payload: {} });
+      },
+      close: () => {
+        db().removeChannel(channel);
+      },
+    };
+  },
+
+  subscribeInbox(onChange) {
+    // O RLS garante que só chegam eventos das conversas desta pessoa.
+    const channel = db()
+      .channel(`inbox:${Crypto.randomUUID()}`)
+      .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'messages' }, (payload) => {
+        const row = payload.new as MessageRow;
+        onChange({ type: 'message', matchId: row.match_id, fromMe: row.sender_id === currentUserId });
+      })
+      .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'matches' }, (payload) =>
+        onChange({ type: 'match', matchId: (payload.new as { id: string }).id, fromMe: false }),
+      )
+      .subscribe();
+    return () => {
+      db().removeChannel(channel);
+    };
+  },
+
+  async unmatch(matchId) {
+    const { error } = await db().rpc('unmatch', { p_match: matchId });
+    if (error) fail(error);
+  },
+
+  async report(profileId, reason, details) {
+    const { error } = await db().from('reports').insert({ reported_id: profileId, reason, details: details.trim() });
+    if (error) fail(error);
   },
 };

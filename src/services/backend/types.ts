@@ -1,3 +1,4 @@
+import type { ChatChannel, ChatEvents, Conversation, Message, ReportReason } from '@/types/chat';
 import type { DiscoveryPrefs, DiscoveryScope, Plan, Profile, UserProfile } from '@/types/user';
 
 export type Account = { id: string; email: string };
@@ -52,9 +53,22 @@ export interface Backend {
   loadPlan(account: Account): Promise<Plan>;
 
   fetchDeck(scope: DiscoveryScope): Promise<Profile[]>;
-  swipe(target: Profile, direction: 'like' | 'nope' | 'super'): Promise<{ matched: boolean }>;
-  fetchMatches(): Promise<Profile[]>;
+  swipe(target: Profile, direction: 'like' | 'nope' | 'super'): Promise<{ matched: boolean; matchId: string | null }>;
+  /** Matches com a última mensagem e as não lidas, da conversa mais recente para a mais antiga. */
+  fetchConversations(): Promise<Conversation[]>;
   likesYouCount(): Promise<number>;
   /** Exige plano Gold ou Platinum. */
   fetchLikesYou(): Promise<Profile[]>;
+
+  // ---- chat
+  /** Mensagens mais recentes primeiro. Passe `before` (ISO) para carregar as anteriores. */
+  fetchMessages(matchId: string, before?: string): Promise<Message[]>;
+  sendMessage(message: Pick<Message, 'id' | 'matchId' | 'body'>): Promise<Message>;
+  markRead(matchId: string): Promise<void>;
+  /** Mensagens novas, confirmações de leitura e "digitando…" de uma conversa. */
+  openChat(matchId: string, events: ChatEvents): ChatChannel;
+  /** Avisa quando chega mensagem ou match novo em qualquer conversa. */
+  subscribeInbox(onChange: (event: { type: 'message' | 'match'; matchId: string; fromMe: boolean }) => void): () => void;
+  unmatch(matchId: string): Promise<void>;
+  report(profileId: string, reason: ReportReason, details: string): Promise<void>;
 }

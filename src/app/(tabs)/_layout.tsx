@@ -13,7 +13,7 @@ const icon = (name: IconName, active: IconName) =>
   );
 
 export default function TabsLayout() {
-  const { matches, likesCount } = useAppState();
+  const { inboxBadge, likesCount } = useAppState();
 
   return (
     <Tabs
@@ -45,7 +45,7 @@ export default function TabsLayout() {
         options={{
           title: 'Mensagens',
           tabBarIcon: icon('chatbubbles-outline', 'chatbubbles'),
-          tabBarBadge: matches.length || undefined,
+          tabBarBadge: inboxBadge || undefined,
           tabBarBadgeStyle: { backgroundColor: colors.rose, fontFamily: fonts.bold, fontSize: 10 },
         }}
       />

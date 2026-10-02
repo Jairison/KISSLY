@@ -48,10 +48,10 @@ export default function DiscoverScreen() {
 
     backend
       .swipe(profile, DIRECTION[direction])
-      .then(({ matched }) => {
-        if (!matched) return;
-        addMatch(profile);
-        router.push({ pathname: '/match/[id]', params: { id: profile.id } });
+      .then(({ matched, matchId }) => {
+        if (!matched || !matchId) return;
+        addMatch(profile, matchId);
+        router.push({ pathname: '/match/[id]', params: { id: matchId } });
       })
       .catch((e) =>
         show(e instanceof BackendError ? e.message : 'Não foi possível registrar seu swipe', 'cloud-offline-outline', colors.danger),

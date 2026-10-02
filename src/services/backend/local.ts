@@ -5,6 +5,7 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 import * as Crypto from 'expo-crypto';
 
 import { buildDeck, profiles as demoProfiles } from '@/data/profiles';
+import type { ChatEvents, Conversation, Message } from '@/types/chat';
 import { DEFAULT_PREFS, type DiscoveryPrefs, type Profile, type UserProfile } from '@/types/user';
 
 import { BackendError, type Account, type Backend } from './types';
@@ -33,12 +34,60 @@ const listeners = new Set<(account: Account | null) => void>();
 let current: Account | null = null;
 /** Swipes da sessão atual (os perfis voltam ao reabrir o app, de propósito, para a demonstração). */
 const swiped = new Set<string>();
-const matches: Profile[] = [];
+
+// ---- chat de demonstração (em memória)
+type LocalMatch = { matchId: string; matchedAt: string; profile: Profile; replies: number };
+const matches: LocalMatch[] = [];
+const messages = new Map<string, Message[]>();
+const chatListeners = new Map<string, Set<ChatEvents>>();
+const inboxListeners = new Set<(e: { type: 'message' | 'match'; matchId: string; fromMe: boolean }) => void>();
+
+const DEMO_REPLIES = [
+  'Oii! Que bom que você puxou assunto 😊',
+  'Haha adorei! E o que você gosta de fazer no fim de semana?',
+  'Sério? Me conta mais, fiquei curiosa(o)!',
+  'A gente tem bastante coisa em comum, né?',
+  'Topa um café essa semana? ☕',
+];
+
+function emitMessage(message: Message, fromMe: boolean) {
+  const list = messages.get(message.matchId) ?? [];
+  messages.set(message.matchId, [message, ...list]);
+  chatListeners.get(message.matchId)?.forEach((l) => l.onMessage(message));
+  inboxListeners.forEach((l) => l({ type: 'message', matchId: message.matchId, fromMe }));
+}
+
+/** O perfil fictício “lê”, mostra digitando e responde, para dar vida à demonstração. */
+function scheduleDemoReply(match: LocalMatch) {
+  if (match.replies >= DEMO_REPLIES.length) return;
+  const reply = DEMO_REPLIES[match.replies++];
+  setTimeout(() => {
+    const readAt = new Date().toISOString();
+    const mine = (messages.get(match.matchId) ?? []).filter((m) => m.senderId !== match.profile.id && !m.readAt);
+    mine.forEach((m) => (m.readAt = readAt));
+    chatListeners.get(match.matchId)?.forEach((l) => l.onRead(mine.map((m) => m.id), readAt));
+  }, 900);
+  setTimeout(() => chatListeners.get(match.matchId)?.forEach((l) => l.onTyping()), 1400);
+  setTimeout(() => {
+    emitMessage(
+      {
+        id: Crypto.randomUUID(),
+        matchId: match.matchId,
+        senderId: match.profile.id,
+        body: reply,
+        createdAt: new Date().toISOString(),
+        readAt: null,
+      },
+      false,
+    );
+  }, 3200);
+}
 
 function setCurrent(account: Account | null) {
   current = account;
   swiped.clear();
   matches.length = 0;
+  messages.clear();
   listeners.forEach((cb) => cb(account));
 }
 
@@ -157,12 +206,27 @@ export const localBackend: Backend = {
   async swipe(target, direction) {
     swiped.add(target.id);
     const matched = direction !== 'nope' && !!target.likesYou;
-    if (matched) matches.unshift(target);
-    return { matched };
+    if (!matched) return { matched, matchId: null };
+    const matchId = `local-${target.id}`;
+    matches.unshift({ matchId, matchedAt: new Date().toISOString(), profile: target, replies: 0 });
+    return { matched, matchId };
   },
 
-  async fetchMatches() {
-    return [...matches];
+  async fetchConversations() {
+    const list: Conversation[] = matches.map((m) => {
+      const msgs = messages.get(m.matchId) ?? [];
+      const last = msgs[0];
+      return {
+        matchId: m.matchId,
+        matchedAt: m.matchedAt,
+        profile: m.profile,
+        lastMessage: last?.body ?? null,
+        lastMessageAt: last?.createdAt ?? null,
+        lastFromMe: last ? last.senderId !== m.profile.id : false,
+        unread: msgs.filter((msg) => msg.senderId === m.profile.id && !msg.readAt).length,
+      };
+    });
+    return list.sort((a, b) => (b.lastMessageAt ?? b.matchedAt).localeCompare(a.lastMessageAt ?? a.matchedAt));
   },
 
   async likesYouCount() {
@@ -171,5 +235,50 @@ export const localBackend: Backend = {
 
   async fetchLikesYou() {
     throw new BackendError('Ver quem curtiu você é exclusivo do Kissly Gold', 'premium_required');
+  },
+
+  async fetchMessages(matchId, before) {
+    const all = messages.get(matchId) ?? [];
+    return (before ? all.filter((m) => m.createdAt < before) : all).slice(0, 30);
+  },
+
+  async sendMessage({ id, matchId, body }) {
+    const account = requireAccount();
+    const match = matches.find((m) => m.matchId === matchId);
+    if (!match) throw new BackendError('Essa conversa não existe mais.');
+    const message: Message = { id, matchId, senderId: account.id, body, createdAt: new Date().toISOString(), readAt: null };
+    emitMessage(message, true);
+    scheduleDemoReply(match);
+    return message;
+  },
+
+  async markRead(matchId) {
+    const now = new Date().toISOString();
+    const match = matches.find((m) => m.matchId === matchId);
+    (messages.get(matchId) ?? []).forEach((m) => {
+      if (m.senderId === match?.profile.id && !m.readAt) m.readAt = now;
+    });
+  },
+
+  openChat(matchId, events) {
+    const set = chatListeners.get(matchId) ?? new Set();
+    set.add(events);
+    chatListeners.set(matchId, set);
+    return { sendTyping: () => {}, close: () => set.delete(events) };
+  },
+
+  subscribeInbox(onChange) {
+    inboxListeners.add(onChange);
+    return () => inboxListeners.delete(onChange);
+  },
+
+  async unmatch(matchId) {
+    const index = matches.findIndex((m) => m.matchId === matchId);
+    if (index >= 0) matches.splice(index, 1);
+    messages.delete(matchId);
+  },
+
+  async report() {
+    // No modo demonstração não há moderação; a denúncia é apenas aceita.
   },
 };

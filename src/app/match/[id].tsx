@@ -15,8 +15,8 @@ import { colors, fonts, gradients, radii, spacing } from '@/theme';
 export default function MatchScreen() {
   const { id } = useLocalSearchParams<{ id: string }>();
   const me = useCurrentUser();
-  const { matches } = useAppState();
-  const profile = matches.find((p) => p.id === id);
+  const { conversations } = useAppState();
+  const profile = conversations.find((c) => c.matchId === id)?.profile;
 
   useEffect(() => {
     Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success).catch(() => {});
@@ -53,7 +53,7 @@ export default function MatchScreen() {
       </View>
 
       <Animated.View entering={FadeIn.delay(700)} style={styles.buttons}>
-        <Pressable onPress={() => router.dismissTo('/chats')}>
+        <Pressable onPress={() => router.replace({ pathname: '/chat/[matchId]', params: { matchId: id } })}>
           <LinearGradient colors={gradients.brand} start={{ x: 0, y: 0 }} end={{ x: 1, y: 0 }} style={styles.primary}>
             <Ionicons name="chatbubble-ellipses" size={18} color="#fff" />
             <Text style={styles.primaryText}>Enviar mensagem</Text>

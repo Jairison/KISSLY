@@ -15,6 +15,7 @@ const ok = (cond, label, extra = '') => {
 
 // --- Simulação mínima do ambiente Supabase -------------------------------
 await db.exec(`
+  create publication supabase_realtime;
   create role anon nologin; create role authenticated nologin; create role service_role nologin;
   create schema auth;
   create table auth.users (
@@ -42,8 +43,10 @@ await db.exec(`
   alter default privileges in schema public grant all on functions to anon, authenticated, service_role;
 `);
 
-await db.exec(fs.readFileSync(`${ROOT}/migrations/20261001000000_init.sql`, 'utf8'));
-ok(true, 'migração aplicada');
+for (const file of fs.readdirSync(`${ROOT}/migrations`).sort()) {
+  await db.exec(fs.readFileSync(`${ROOT}/migrations/${file}`, 'utf8'));
+  ok(true, `migração ${file}`);
+}
 await db.exec(fs.readFileSync(`${ROOT}/seed.sql`, 'utf8'));
 await db.exec(fs.readFileSync(`${ROOT}/seed.sql`, 'utf8')); // idempotente?
 const demos = (await db.query(`select count(*)::int n from public.profiles`)).rows[0].n;
@@ -150,6 +153,61 @@ await expectError('Não pode enviar foto na pasta de outra pessoa',
   () => as(U1, `insert into storage.objects (bucket_id, name) values ('photos', '${U2}/x.jpg')`), 'row-level security');
 await as(U1, `insert into storage.objects (bucket_id, name) values ('photos', '${U1}/x.jpg')`);
 ok(true, 'Pode enviar foto na própria pasta');
+
+// ------------------------------------------------------------------ chat
+const U3 = '33333333-3333-4333-8333-333333333333'; // intruso, fora do match
+await db.exec(`insert into auth.users (id, email) values ('${U3}', 'u3@test.dev');`);
+await as(U3, insertProfile, [U3, 'Intruso', '1990-01-01', 'man', 'women']);
+
+const conv = await as(U1, `select match_id, name, last_message, unread from public.get_matches() where name = 'Ana'`);
+const MATCH = conv.rows[0]?.match_id;
+ok(!!MATCH && conv.rows[0].last_message === null, 'Conversa nova com a Ana, ainda sem mensagens');
+
+await as(U1, `insert into public.messages (match_id, body) values ($1, 'Oi Ana! Tudo bem?')`, [MATCH]);
+ok(true, 'U1 envia mensagem (remetente preenchido automaticamente)');
+await new Promise((r) => setTimeout(r, 5));
+await as(U2, `insert into public.messages (match_id, sender_id, body) values ($1, $2, 'Tudo ótimo, e você?')`, [MATCH, U2]);
+
+await expectError('Não pode enviar mensagem em nome de outra pessoa',
+  () => as(U1, `insert into public.messages (match_id, sender_id, body) values ($1, $2, 'fake')`, [MATCH, U2]), 'row-level security');
+await expectError('Quem não é do match não consegue enviar',
+  () => as(U3, `insert into public.messages (match_id, body) values ($1, 'oi')`, [MATCH]), 'row-level security');
+await expectError('Mensagem vazia é recusada',
+  () => as(U1, `insert into public.messages (match_id, body) values ($1, '   ')`, [MATCH]), 'check constraint');
+await expectError('Não pode editar mensagens diretamente',
+  () => as(U1, `update public.messages set body = 'editada'`), 'permission denied');
+
+const spy = await as(U3, `select count(*)::int n from public.messages`);
+ok(spy.rows[0].n === 0, 'Quem não é do match não lê a conversa', spy.rows[0].n);
+const both = await as(U2, `select body from public.messages where match_id = $1 order by created_at`, [MATCH]);
+ok(both.rows.length === 2, 'As duas pessoas leem a conversa', both.rows.map((r) => r.body).join(' | '));
+
+const inbox = await as(U1, `select last_message, last_from_me, unread from public.get_matches() where match_id = $1`, [MATCH]);
+ok(inbox.rows[0].last_message === 'Tudo ótimo, e você?' && inbox.rows[0].last_from_me === false && inbox.rows[0].unread === 1,
+  'Lista de conversas traz última mensagem e 1 não lida', JSON.stringify(inbox.rows[0]));
+
+await as(U3, `select public.mark_read($1)`, [MATCH]);
+const stillUnread = await as(U1, `select unread from public.get_matches() where match_id = $1`, [MATCH]);
+ok(stillUnread.rows[0].unread === 1, 'Intruso não consegue marcar como lida');
+await as(U1, `select public.mark_read($1)`, [MATCH]);
+const readNow = await as(U1, `select unread from public.get_matches() where match_id = $1`, [MATCH]);
+const mine = await as(U1, `select read_at from public.messages where sender_id = $1`, [U1]);
+ok(readNow.rows[0].unread === 0 && mine.rows[0].read_at === null, 'mark_read marca só as recebidas');
+
+await as(U1, `insert into public.reports (reported_id, reason, details) values ($1, 'spam', 'teste')`, [U3]);
+ok(true, 'Pode enviar denúncia');
+await expectError('Ninguém lê denúncias pelo app', () => as(U3, `select * from public.reports`), 'permission denied');
+await expectError('Motivo de denúncia inválido é recusado',
+  () => as(U1, `insert into public.reports (reported_id, reason) values ($1, 'qualquer')`, [U3]), 'check constraint');
+
+const marianaMatch = (await as(U1, `select match_id from public.get_matches() where name = 'Mariana'`)).rows[0].match_id;
+await as(U1, `insert into public.messages (match_id, body) values ($1, 'oi')`, [marianaMatch]);
+await expectError('Intruso não desfaz match alheio', () => as(U3, `select public.unmatch($1)`, [marianaMatch]), 'não encontrado');
+await as(U1, `select public.unmatch($1)`, [marianaMatch]);
+const afterUnmatch = await db.query(`select (select count(*) from public.matches where id = $1)::int m, (select count(*) from public.messages where match_id = $1)::int msg`, [marianaMatch]);
+ok(afterUnmatch.rows[0].m + afterUnmatch.rows[0].msg === 0, 'Desfazer match apaga o match e a conversa');
+const backInDeck = await as(U1, `select name from public.get_deck('state')`);
+ok(!backInDeck.rows.some((r) => r.name === 'Mariana'), 'Após desfazer, a pessoa não volta ao baralho');
 
 await as(U2, `select public.delete_account()`);
 const gone = await db.query(`select (select count(*) from auth.users where id = $1)::int u, (select count(*) from public.profiles where id = $1)::int p,
