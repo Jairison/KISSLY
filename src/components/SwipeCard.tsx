@@ -137,6 +137,13 @@ export function SwipeCard({ ref, profile, isTop, progress, onSwiped }: Props) {
           <Text style={[styles.stampText, { color: colors.sky }]}>SUPER</Text>
         </Animated.View>
 
+        {profile.superLikedYou && (
+          <View style={styles.superBadge}>
+            <Ionicons name="star" size={14} color="#fff" />
+            <Text style={styles.superBadgeText}>Deu Super Like em você</Text>
+          </View>
+        )}
+
         <LinearGradient colors={gradients.cardShade} locations={[0.45, 0.65, 1]} style={styles.shade} pointerEvents="none">
           <View style={styles.info}>
             <View style={styles.nameRow}>
@@ -199,6 +206,20 @@ const styles = StyleSheet.create({
   stampNope: { right: 24, borderColor: colors.danger, transform: [{ rotate: '16deg' }] },
   stampSuper: { alignSelf: 'center', top: '42%', borderColor: colors.sky, transform: [{ rotate: '-8deg' }] },
   stampText: { fontFamily: fonts.bold, fontSize: 36, letterSpacing: 4 },
+  superBadge: {
+    position: 'absolute',
+    top: 22,
+    left: 14,
+    zIndex: 2,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    paddingHorizontal: 12,
+    paddingVertical: 6,
+    borderRadius: radii.pill,
+    backgroundColor: colors.sky,
+  },
+  superBadgeText: { fontFamily: fonts.bold, fontSize: 12, color: '#fff' },
   shade: { ...StyleSheet.absoluteFill, justifyContent: 'flex-end' },
   info: { padding: spacing.xl, gap: 6 },
   nameRow: { flexDirection: 'row', alignItems: 'baseline' },

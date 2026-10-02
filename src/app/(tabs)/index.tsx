@@ -16,16 +16,23 @@ import { useAppState } from '@/state/AppState';
 import { useDeck } from '@/state/useDeck';
 import { colors, fonts, gradients, radii, spacing } from '@/theme';
 import { isPremium, type DiscoveryScope, type Profile, type SwipeDirection } from '@/types/user';
+import type { Feature } from '@/data/plans';
 
 const DIRECTION = { left: 'nope', right: 'like', up: 'super' } as const;
 
+const openPlans = (feature: Feature) => router.push({ pathname: '/plans', params: { feature } });
+
 export default function DiscoverScreen() {
-  const { plan, addMatch } = useAppState();
+  const { plan, usage, addMatch, consume, refreshUsage } = useAppState();
   const hasPremium = isPremium(plan);
   const { show } = useToast();
 
   const [scope, setScope] = useState<DiscoveryScope>('state');
-  const { queue, status, error, pop, reload } = useDeck(scope);
+  const { queue, status, error, pop, unshift, reload } = useDeck(scope);
+  const [rewinding, setRewinding] = useState(false);
+
+  const outOfLikes = usage?.likesLeft === 0;
+  const outOfSupers = usage?.supersLeft === 0;
 
   const progress = useSharedValue(0);
   const topCard = useRef<SwipeCardHandle>(null);
@@ -34,16 +41,22 @@ export default function DiscoverScreen() {
   const next = queue[1];
 
   const changeScope = (value: DiscoveryScope) => {
-    if (value === 'international' && !hasPremium) {
-      show('Conheça pessoas do mundo todo com o Kissly Gold', 'globe-outline');
-      return;
-    }
+    if (value === 'international' && !hasPremium) return openPlans('international');
     setScope(value);
+  };
+
+  /** Limite do dia esgotado: o card volta e a tela de planos abre. */
+  const blocked = (profile: Profile, feature: Feature) => {
+    unshift(profile);
+    openPlans(feature);
   };
 
   const handleSwiped = (profile: Profile, direction: SwipeDirection) => {
     progress.value = 0;
     pop();
+    if (direction === 'right' && outOfLikes) return blocked(profile, 'likes');
+    if (direction === 'up' && outOfSupers) return blocked(profile, 'super');
+    if (direction !== 'left') consume(direction === 'up' ? 'super' : 'like');
     if (direction === 'up') show(`Super Like enviado para ${profile.name}`, 'star', colors.sky);
 
     backend
@@ -53,9 +66,26 @@ export default function DiscoverScreen() {
         addMatch(profile, matchId);
         router.push({ pathname: '/match/[id]', params: { id: matchId } });
       })
-      .catch((e) =>
-        show(e instanceof BackendError ? e.message : 'Não foi possível registrar seu swipe', 'cloud-offline-outline', colors.danger),
-      );
+      .catch((e) => {
+        if (e instanceof BackendError && (e.code === 'limit_likes' || e.code === 'limit_super')) {
+          refreshUsage();
+          return blocked(profile, e.code === 'limit_likes' ? 'likes' : 'super');
+        }
+        show(e instanceof BackendError ? e.message : 'Não foi possível registrar seu swipe', 'cloud-offline-outline', colors.danger);
+      });
+  };
+
+  const rewind = async () => {
+    if (!usage?.canRewind) return openPlans('rewind');
+    if (rewinding) return;
+    setRewinding(true);
+    try {
+      unshift(await backend.rewind());
+    } catch (e) {
+      show(e instanceof BackendError ? e.message : 'Não foi possível voltar', 'arrow-undo', colors.textMuted);
+    } finally {
+      setRewinding(false);
+    }
   };
 
   let content;
@@ -112,10 +142,11 @@ export default function DiscoverScreen() {
       <View style={styles.actions}>
         <ActionButtons
           disabled={!current}
-          onRewind={() => show('Voltar perfis é um recurso do Kissly Plus', 'arrow-undo')}
+          supersLeft={usage?.supersLeft}
+          onRewind={rewind}
           onNope={() => topCard.current?.swipe('left')}
-          onSuper={() => topCard.current?.swipe('up')}
-          onLike={() => topCard.current?.swipe('right')}
+          onSuper={() => (outOfSupers ? openPlans('super') : topCard.current?.swipe('up'))}
+          onLike={() => (outOfLikes ? openPlans('likes') : topCard.current?.swipe('right'))}
           onBoost={() => show('Boost: seja destaque por 30 min no Kissly Gold', 'flash', colors.violet)}
         />
       </View>

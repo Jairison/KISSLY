@@ -42,8 +42,21 @@ export type Profile = {
   /** null quando uma das pessoas não compartilhou a localização. */
   distanceKm: number | null;
   verified: boolean;
+  /** Deu Super Like em você (aparece primeiro no baralho, com selo). */
+  superLikedYou?: boolean;
   /** Só nos dados de demonstração locais: já curtiu o usuário. */
   likesYou?: boolean;
+};
+
+/** Quanto ainda resta hoje no plano atual. */
+export type Usage = {
+  plan: Plan;
+  /** null = ilimitado */
+  likesLeft: number | null;
+  supersLeft: number;
+  /** ISO: quando os limites reiniciam (meia-noite de Brasília) */
+  resetsAt: string;
+  canRewind: boolean;
 };
 
 export type DiscoveryPrefs = {

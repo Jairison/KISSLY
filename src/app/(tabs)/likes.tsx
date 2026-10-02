@@ -1,12 +1,11 @@
 import { useCallback, useState } from 'react';
 import { Pressable, RefreshControl, ScrollView, StyleSheet, Text, View, useWindowDimensions } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import { useFocusEffect } from 'expo-router';
+import { router, useFocusEffect } from 'expo-router';
 import { Image } from 'expo-image';
 import { LinearGradient } from 'expo-linear-gradient';
 import { Ionicons } from '@expo/vector-icons';
 
-import { useToast } from '@/components/Toast';
 import { backend } from '@/services/backend';
 import { useAppState } from '@/state/AppState';
 import { colors, fonts, gradients, radii, spacing } from '@/theme';
@@ -22,7 +21,6 @@ const MYSTERY = [
 
 export default function LikesScreen() {
   const { plan, likesCount, refresh } = useAppState();
-  const { show } = useToast();
   const canSee = isPremium(plan);
   const { width } = useWindowDimensions();
   const tile = (width - spacing.lg * 2 - spacing.md) / 2;
@@ -103,7 +101,7 @@ export default function LikesScreen() {
 
       {!canSee && likesCount > 0 && (
         <View style={styles.ctaWrap}>
-          <Pressable onPress={() => show('Os planos chegam na Parte 5', 'diamond')}>
+          <Pressable onPress={() => router.push({ pathname: '/plans', params: { feature: 'see_likes' } })}>
             <LinearGradient colors={gradients.gold} start={{ x: 0, y: 0 }} end={{ x: 1, y: 1 }} style={styles.cta}>
               <Ionicons name="eye" size={18} color={colors.background} />
               <Text style={styles.ctaText}>Veja quem curtiu você com o Gold</Text>

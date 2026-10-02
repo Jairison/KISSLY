@@ -4,9 +4,11 @@
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import * as Crypto from 'expo-crypto';
 
+import { LIMITS } from '@/data/plans';
 import { buildDeck, profiles as demoProfiles } from '@/data/profiles';
+import { readDemoPlan } from '@/services/payments/demo';
 import type { ChatEvents, Conversation, Message } from '@/types/chat';
-import { DEFAULT_PREFS, type DiscoveryPrefs, type Profile, type UserProfile } from '@/types/user';
+import { DEFAULT_PREFS, isPremium, type DiscoveryPrefs, type Plan, type Profile, type UserProfile } from '@/types/user';
 
 import { BackendError, type Account, type Backend } from './types';
 
@@ -34,6 +36,17 @@ const listeners = new Set<(account: Account | null) => void>();
 let current: Account | null = null;
 /** Swipes da sessão atual (os perfis voltam ao reabrir o app, de propósito, para a demonstração). */
 const swiped = new Set<string>();
+/** Histórico do dia (para os limites do plano e para voltar perfil). */
+let history: { profile: Profile; direction: 'like' | 'nope' | 'super'; at: number }[] = [];
+
+function dayStart() {
+  const d = new Date();
+  return new Date(d.getFullYear(), d.getMonth(), d.getDate()).getTime();
+}
+const countToday = (direction: 'like' | 'super') =>
+  history.filter((h) => h.direction === direction && h.at >= dayStart()).length;
+
+const currentPlan = (): Promise<Plan> => (current ? readDemoPlan(current.id) : Promise.resolve('free'));
 
 // ---- chat de demonstração (em memória)
 type LocalMatch = { matchId: string; matchedAt: string; profile: Profile; replies: number };
@@ -86,6 +99,7 @@ function scheduleDemoReply(match: LocalMatch) {
 function setCurrent(account: Account | null) {
   current = account;
   swiped.clear();
+  history = [];
   matches.length = 0;
   messages.clear();
   listeners.forEach((cb) => cb(account));
@@ -193,10 +207,34 @@ export const localBackend: Backend = {
 
   loadPrefs: async (account) => (await readJSON<DiscoveryPrefs>(KEYS.prefs(account.id))) ?? DEFAULT_PREFS,
   savePrefs: (account, prefs) => writeJSON(KEYS.prefs(account.id), prefs),
-  loadPlan: async () => 'free',
+  loadPlan: (account) => readDemoPlan(account.id),
+
+  async loadUsage() {
+    const plan = await currentPlan();
+    const limits = LIMITS[plan];
+    return {
+      plan,
+      likesLeft: limits.dailyLikes === null ? null : Math.max(0, limits.dailyLikes - countToday('like')),
+      supersLeft: Math.max(0, limits.dailySupers - countToday('super')),
+      resetsAt: new Date(dayStart() + 86_400_000).toISOString(),
+      canRewind: limits.canRewind,
+    };
+  },
+
+  async rewind() {
+    if (!LIMITS[await currentPlan()].canRewind) {
+      throw new BackendError('Voltar perfis é um recurso do Kissly Plus', 'premium_required');
+    }
+    const last = history[history.length - 1];
+    if (!last) throw new BackendError('Não há nenhum perfil para voltar');
+    if (last.direction !== 'nope') throw new BackendError('Só dá para voltar perfis que você passou');
+    history.pop();
+    swiped.delete(last.profile.id);
+    return last.profile;
+  },
 
   async fetchDeck(scope) {
-    if (scope === 'international') {
+    if (scope === 'international' && !isPremium(await currentPlan())) {
       throw new BackendError('O modo Internacional é exclusivo do Kissly Gold', 'premium_required');
     }
     const { profile, prefs } = await loadOwn();
@@ -204,7 +242,15 @@ export const localBackend: Backend = {
   },
 
   async swipe(target, direction) {
+    const limits = LIMITS[await currentPlan()];
+    if (direction === 'like' && limits.dailyLikes !== null && countToday('like') >= limits.dailyLikes) {
+      throw new BackendError('Você usou todos os seus Kiss de hoje', 'limit_likes');
+    }
+    if (direction === 'super' && countToday('super') >= limits.dailySupers) {
+      throw new BackendError('Você usou todos os seus Super Likes de hoje', 'limit_super');
+    }
     swiped.add(target.id);
+    history.push({ profile: target, direction, at: Date.now() });
     const matched = direction !== 'nope' && !!target.likesYou;
     if (!matched) return { matched, matchId: null };
     const matchId = `local-${target.id}`;
@@ -234,7 +280,10 @@ export const localBackend: Backend = {
   },
 
   async fetchLikesYou() {
-    throw new BackendError('Ver quem curtiu você é exclusivo do Kissly Gold', 'premium_required');
+    if (!isPremium(await currentPlan())) {
+      throw new BackendError('Ver quem curtiu você é exclusivo do Kissly Gold', 'premium_required');
+    }
+    return demoProfiles.filter((p) => p.likesYou && !swiped.has(p.id));
   },
 
   async fetchMessages(matchId, before) {

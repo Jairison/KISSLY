@@ -214,5 +214,64 @@ const gone = await db.query(`select (select count(*) from auth.users where id = 
   (select count(*) from public.matches where $1 in (user_a, user_b))::int m`, [U2]);
 ok(gone.rows[0].u + gone.rows[0].p + gone.rows[0].m === 0, 'Excluir conta apaga usuário, perfil e matches', JSON.stringify(gone.rows[0]));
 
+// ---------------------------------------------------------------- planos
+const U4 = '44444444-4444-4444-8444-444444444444'; // plano grátis
+const U5 = '55555555-5555-4555-8555-555555555555'; // Platinum
+const U6 = '66666666-6666-4666-8666-666666666666'; // quem vai ver o baralho
+await db.exec(`insert into auth.users (id, email) values ('${U4}', 'u4@test.dev'), ('${U5}', 'u5@test.dev'), ('${U6}', 'u6@test.dev');`);
+await as(U4, insertProfile, [U4, 'Livre', '1992-02-02', 'woman', 'men']);
+await as(U5, insertProfile, [U5, 'Platina', '1991-01-01', 'man', 'women']);
+await as(U6, insertProfile, [U6, 'Vê', '1994-04-04', 'woman', 'men']);
+await db.exec(`insert into public.subscriptions values ('${U5}', 'platinum', now() + interval '30 days')`);
+
+// 60 perfis extras para esgotar o limite de Kiss
+const extra = (i) => `99999999-0000-4000-8000-${String(i).padStart(12, '0')}`;
+await db.exec(`
+  insert into auth.users (id, email)
+  select ('99999999-0000-4000-8000-' || lpad(g::text, 12, '0'))::uuid, 'x' || g || '@test.dev' from generate_series(1, 60) g;
+  insert into public.profiles (id, name, birthdate, gender, show_me, photos, city, state, country)
+  select ('99999999-0000-4000-8000-' || lpad(g::text, 12, '0'))::uuid, 'Extra' || g, '1990-01-01', 'man', 'everyone',
+         array['a','b'], 'Campinas', 'SP', 'Brasil' from generate_series(1, 60) g;`);
+const swipeAs = (uid, target, dir) => as(uid, `select * from public.swipe($1, '${dir}')`, [target]);
+const usageOf = async (uid) => (await as(uid, 'select * from public.my_usage()')).rows[0];
+
+let usage = await usageOf(U4);
+ok(usage.plan === 'free' && usage.likes_left === 50 && usage.supers_left === 1 && usage.can_rewind === false,
+  'Grátis começa com 50 Kiss e 1 Super Like', JSON.stringify(usage));
+for (let i = 1; i <= 50; i++) await swipeAs(U4, extra(i), 'like');
+await expectError('Grátis: o 51º Kiss do dia é bloqueado', () => swipeAs(U4, extra(51), 'like'), 'Kiss de hoje');
+await swipeAs(U4, extra(52), 'nope');
+ok(true, 'Grátis: passar (nope) continua liberado');
+await swipeAs(U4, extra(53), 'super');
+await expectError('Grátis: o 2º Super Like do dia é bloqueado', () => swipeAs(U4, extra(54), 'super'), 'Super Likes de hoje');
+usage = await usageOf(U4);
+ok(usage.likes_left === 0 && usage.supers_left === 0, 'my_usage mostra os limites esgotados', JSON.stringify(usage));
+await expectError('Grátis não pode voltar perfil', () => as(U4, 'select * from public.rewind()'), 'Kissly Plus');
+
+// Plus: Kiss ilimitado e voltar perfil
+await db.exec(`insert into public.subscriptions values ('${U4}', 'plus', now() + interval '30 days')`);
+await swipeAs(U4, extra(51), 'like');
+ok(true, 'Plus: Kiss liberado depois do limite grátis');
+await expectError('Só volta perfis passados (o último foi Kiss)', () => as(U4, 'select * from public.rewind()'), 'que você passou');
+await swipeAs(U4, extra(55), 'nope');
+const rewound = await as(U4, 'select name from public.rewind()');
+ok(rewound.rows[0]?.name === 'Extra55', 'Plus: voltar perfil devolve o último que passou', rewound.rows[0]?.name);
+const again = await as(U4, "select name from public.get_deck('national', 50)");
+ok(again.rows.some((r) => r.name === 'Extra55'), 'O perfil volta para o baralho');
+
+await db.exec(`update public.subscriptions set expires_at = now() - interval '1 day' where user_id = '${U4}'`);
+ok((await usageOf(U4)).plan === 'free', 'Assinatura vencida volta ao plano grátis');
+
+// Super Like aparece primeiro e com selo; depois o Kiss prioritário do Platinum
+await swipeAs(U5, U6, 'like');
+await db.exec(`insert into public.swipes values ('${extra(59)}', '${U6}', 'super')`);
+const deck = await as(U6, "select name, super_liked_you from public.get_deck('national', 50)");
+ok(deck.rows[0]?.name === 'Extra59' && deck.rows[0]?.super_liked_you === true,
+  'Quem deu Super Like aparece primeiro, com selo', JSON.stringify(deck.rows[0]));
+ok(deck.rows[1]?.name === 'Platina' && deck.rows[1]?.super_liked_you === false,
+  'Em seguida, o Kiss prioritário do Platinum', deck.rows[1]?.name);
+usage = await usageOf(U5);
+ok(usage.supers_left === 10 && usage.likes_left === null, 'Platinum: 10 Super Likes e Kiss ilimitado', JSON.stringify(usage));
+
 console.log(failures ? `\n${failures} FALHA(S)` : '\nTODOS OS TESTES PASSARAM');
 process.exit(failures ? 1 : 0);

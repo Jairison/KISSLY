@@ -6,6 +6,8 @@ import { LinearGradient } from 'expo-linear-gradient';
 import { Ionicons } from '@expo/vector-icons';
 
 import { useToast } from '@/components/Toast';
+import { PLANS, PLAN_LABEL } from '@/data/plans';
+import { PaymentError, payments } from '@/services/payments';
 import { useAppState } from '@/state/AppState';
 import { useCurrentUser, useSession } from '@/state/Session';
 import { colors, fonts, gradients, radii, spacing } from '@/theme';
@@ -13,17 +15,9 @@ import { ageFromBirthdate, profileCompletion } from '@/types/user';
 
 type IconName = keyof typeof Ionicons.glyphMap;
 
-const GOLD_PERKS: { icon: IconName; text: string }[] = [
-  { icon: 'eye-outline', text: 'Veja quem curtiu você' },
-  { icon: 'globe-outline', text: 'Modo Internacional: conheça o mundo' },
-  { icon: 'infinite-outline', text: 'Kiss ilimitados e voltar perfis' },
-  { icon: 'flash-outline', text: '1 Boost grátis por mês' },
-];
-
-const PLAN_LABEL = { free: 'Kissly Free', plus: 'Kissly Plus', gold: 'Kissly Gold', platinum: 'Kissly Platinum' };
 
 export default function ProfileScreen() {
-  const { plan } = useAppState();
+  const { plan, applyPlan } = useAppState();
   const user = useCurrentUser();
   const { account, signOut } = useSession();
   const { show } = useToast();
@@ -69,23 +63,20 @@ export default function ProfileScreen() {
           </Text>
         </View>
 
-        <LinearGradient colors={['#2A2116', '#16111C']} style={styles.goldCard}>
-          <View style={styles.goldHeader}>
-            <Ionicons name="diamond" size={20} color={colors.gold} />
-            <Text style={styles.goldTitle}>Kissly Gold</Text>
-          </View>
-          {GOLD_PERKS.map((perk) => (
-            <View key={perk.text} style={styles.perk}>
-              <Ionicons name={perk.icon} size={18} color={colors.gold} />
-              <Text style={styles.perkText}>{perk.text}</Text>
-            </View>
-          ))}
-          <Pressable onPress={() => show('Os planos chegam na Parte 5', 'diamond')}>
-            <LinearGradient colors={gradients.gold} start={{ x: 0, y: 0 }} end={{ x: 1, y: 1 }} style={styles.goldButton}>
-              <Text style={styles.goldButtonText}>Conhecer os planos</Text>
-            </LinearGradient>
-          </Pressable>
-        </LinearGradient>
+        <PlanCard
+          onManage={async () => {
+            try {
+              await payments.manage();
+              // No modo demonstração "gerenciar" cancela na hora; nas lojas, o webhook atualiza depois.
+              if (payments.mode === 'demo') {
+                applyPlan('free');
+                show('Assinatura de demonstração cancelada', 'information-circle-outline', colors.textMuted);
+              }
+            } catch (e) {
+              show(e instanceof PaymentError ? e.message : 'Não foi possível abrir a loja', 'alert-circle', colors.danger);
+            }
+          }}
+        />
 
         {menu.map((item) => (
           <Pressable
@@ -112,7 +103,69 @@ export default function ProfileScreen() {
   );
 }
 
+function PlanCard({ onManage }: { onManage: () => void }) {
+  const { plan } = useAppState();
+
+  if (plan === 'free') {
+    const gold = PLANS.find((p) => p.id === 'gold')!;
+    return (
+      <LinearGradient colors={['#2A2116', '#16111C']} style={styles.goldCard}>
+        <View style={styles.goldHeader}>
+          <Ionicons name="diamond" size={20} color={colors.gold} />
+          <Text style={styles.goldTitle}>Kissly Gold</Text>
+        </View>
+        {gold.perks.slice(0, 4).map((perk) => (
+          <View key={perk.text} style={styles.perk}>
+            <Ionicons name={perk.icon} size={18} color={colors.gold} />
+            <Text style={styles.perkText}>{perk.text}</Text>
+          </View>
+        ))}
+        <Pressable onPress={() => router.push('/plans')}>
+          <LinearGradient colors={gradients.gold} start={{ x: 0, y: 0 }} end={{ x: 1, y: 1 }} style={styles.goldButton}>
+            <Text style={styles.goldButtonText}>Conhecer os planos</Text>
+          </LinearGradient>
+        </Pressable>
+      </LinearGradient>
+    );
+  }
+
+  const info = PLANS.find((p) => p.id === plan)!;
+  return (
+    <View style={[styles.goldCard, { borderColor: `${info.colors[0]}55`, backgroundColor: colors.surface }]}>
+      <View style={styles.goldHeader}>
+        <LinearGradient colors={info.colors} style={styles.planIcon}>
+          <Ionicons name={info.icon} size={16} color={info.ink} />
+        </LinearGradient>
+        <View>
+          <Text style={styles.planKicker}>SEU PLANO</Text>
+          <Text style={[styles.goldTitle, { color: info.colors[0] }]}>{PLAN_LABEL[plan]}</Text>
+        </View>
+      </View>
+      {info.perks.map((perk) => (
+        <View key={perk.text} style={styles.perk}>
+          <Ionicons name={perk.icon} size={18} color={info.colors[0]} />
+          <Text style={styles.perkText}>{perk.text}</Text>
+        </View>
+      ))}
+      {plan !== 'platinum' && (
+        <Pressable onPress={() => router.push({ pathname: '/plans', params: { plan: plan === 'plus' ? 'gold' : 'platinum' } })}>
+          <LinearGradient colors={info.colors} start={{ x: 0, y: 0 }} end={{ x: 1, y: 1 }} style={styles.goldButton}>
+            <Text style={[styles.goldButtonText, { color: info.ink }]}>Fazer upgrade</Text>
+          </LinearGradient>
+        </Pressable>
+      )}
+      <Pressable onPress={onManage} style={styles.manage}>
+        <Text style={styles.manageText}>Gerenciar assinatura</Text>
+      </Pressable>
+    </View>
+  );
+}
+
 const styles = StyleSheet.create({
+  planIcon: { width: 34, height: 34, borderRadius: 17, alignItems: 'center', justifyContent: 'center' },
+  planKicker: { fontFamily: fonts.semibold, fontSize: 10, letterSpacing: 2, color: colors.textFaint },
+  manage: { alignItems: 'center', paddingVertical: spacing.sm },
+  manageText: { fontFamily: fonts.medium, fontSize: 14, color: colors.textMuted, textDecorationLine: 'underline' },
   screen: { flex: 1, backgroundColor: colors.background },
   content: { padding: spacing.lg, paddingBottom: spacing.xxl },
   hero: { alignItems: 'center', paddingVertical: spacing.lg },

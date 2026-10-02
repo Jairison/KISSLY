@@ -1,15 +1,17 @@
-import { Pressable, StyleSheet, View } from 'react-native';
+import { Pressable, StyleSheet, Text, View } from 'react-native';
 import Animated, { useAnimatedStyle, useSharedValue, withSpring } from 'react-native-reanimated';
 import { LinearGradient } from 'expo-linear-gradient';
 import { Ionicons } from '@expo/vector-icons';
 import * as Haptics from 'expo-haptics';
 
-import { colors, gradients } from '@/theme';
+import { colors, fonts, gradients } from '@/theme';
 
 type IconName = keyof typeof Ionicons.glyphMap;
 
 type ButtonProps = {
   icon: IconName;
+  /** Numerozinho no canto (ex.: Super Likes restantes). */
+  badge?: string;
   color: string;
   size: number;
   onPress: () => void;
@@ -17,7 +19,7 @@ type ButtonProps = {
   disabled?: boolean;
 };
 
-function RoundButton({ icon, color, size, onPress, filled, disabled }: ButtonProps) {
+function RoundButton({ icon, color, size, onPress, filled, disabled, badge }: ButtonProps) {
   const scale = useSharedValue(1);
   const style = useAnimatedStyle(() => ({ transform: [{ scale: scale.value }] }));
 
@@ -44,6 +46,11 @@ function RoundButton({ icon, color, size, onPress, filled, disabled }: ButtonPro
         ) : null}
         <Ionicons name={icon} size={size * 0.46} color={filled ? '#fff' : color} />
       </Animated.View>
+      {badge !== undefined && (
+        <View style={[styles.badge, { backgroundColor: color }]}>
+          <Text style={styles.badgeText}>{badge}</Text>
+        </View>
+      )}
     </Pressable>
   );
 }
@@ -55,14 +62,23 @@ type Props = {
   onLike: () => void;
   onBoost: () => void;
   disabled?: boolean;
+  /** Super Likes restantes hoje. */
+  supersLeft?: number;
 };
 
-export function ActionButtons({ onRewind, onNope, onSuper, onLike, onBoost, disabled }: Props) {
+export function ActionButtons({ onRewind, onNope, onSuper, onLike, onBoost, disabled, supersLeft }: Props) {
   return (
     <View style={styles.row}>
       <RoundButton icon="arrow-undo" color={colors.gold} size={46} onPress={onRewind} />
       <RoundButton icon="close" color={colors.danger} size={62} onPress={onNope} disabled={disabled} />
-      <RoundButton icon="star" color={colors.sky} size={50} onPress={onSuper} disabled={disabled} />
+      <RoundButton
+        icon="star"
+        color={colors.sky}
+        size={50}
+        onPress={onSuper}
+        disabled={disabled}
+        badge={supersLeft !== undefined ? String(supersLeft) : undefined}
+      />
       <RoundButton icon="heart" color="#fff" size={70} onPress={onLike} filled disabled={disabled} />
       <RoundButton icon="flash" color={colors.violet} size={46} onPress={onBoost} />
     </View>
@@ -70,6 +86,20 @@ export function ActionButtons({ onRewind, onNope, onSuper, onLike, onBoost, disa
 }
 
 const styles = StyleSheet.create({
+  badge: {
+    position: 'absolute',
+    top: -4,
+    right: -4,
+    minWidth: 20,
+    height: 20,
+    paddingHorizontal: 5,
+    borderRadius: 10,
+    alignItems: 'center',
+    justifyContent: 'center',
+    borderWidth: 2,
+    borderColor: colors.background,
+  },
+  badgeText: { fontFamily: fonts.bold, fontSize: 10, color: colors.background },
   row: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 14 },
   button: {
     alignItems: 'center',

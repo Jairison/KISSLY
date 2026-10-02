@@ -21,6 +21,9 @@ um deve aparecer `Success. No rows returned`.
    matches, regras de segurança (Row Level Security) e o espaço para as fotos.
 2. [`20261002000000_chat.sql`](migrations/20261002000000_chat.sql): mensagens com entrega em tempo real,
    confirmação de leitura, desfazer match e denúncias.
+3. [`20261003000000_plans.sql`](migrations/20261003000000_plans.sql): limites diários de cada plano, voltar
+   perfil, Kiss prioritário e selo de Super Like. Para configurar a cobrança, veja
+   [`docs/PAGAMENTOS.md`](../docs/PAGAMENTOS.md).
 
 Quando novas partes do app trouxerem arquivos novos nessa pasta, rode só os novos, também em ordem.
 

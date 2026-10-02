@@ -1,5 +1,5 @@
 import type { ChatChannel, ChatEvents, Conversation, Message, ReportReason } from '@/types/chat';
-import type { DiscoveryPrefs, DiscoveryScope, Plan, Profile, UserProfile } from '@/types/user';
+import type { DiscoveryPrefs, DiscoveryScope, Plan, Profile, Usage, UserProfile } from '@/types/user';
 
 export type Account = { id: string; email: string };
 
@@ -13,7 +13,14 @@ export type SignUpResult =
 
 export type OAuthProvider = 'google' | 'apple';
 
-export type BackendErrorCode = 'auth' | 'premium_required' | 'network' | 'not_available' | 'unknown';
+export type BackendErrorCode =
+  | 'auth'
+  | 'premium_required'
+  | 'limit_likes'
+  | 'limit_super'
+  | 'network'
+  | 'not_available'
+  | 'unknown';
 
 /** Erro com mensagem já pronta para mostrar ao usuário. */
 export class BackendError extends Error {
@@ -51,11 +58,15 @@ export interface Backend {
   loadPrefs(account: Account): Promise<DiscoveryPrefs>;
   savePrefs(account: Account, prefs: DiscoveryPrefs): Promise<void>;
   loadPlan(account: Account): Promise<Plan>;
+  /** Kiss e Super Likes restantes hoje. */
+  loadUsage(): Promise<Usage>;
 
   fetchDeck(scope: DiscoveryScope): Promise<Profile[]>;
   swipe(target: Profile, direction: 'like' | 'nope' | 'super'): Promise<{ matched: boolean; matchId: string | null }>;
   /** Matches com a última mensagem e as não lidas, da conversa mais recente para a mais antiga. */
   fetchConversations(): Promise<Conversation[]>;
+  /** Desfaz o último “nope” (Plus ou superior) e devolve o perfil. */
+  rewind(): Promise<Profile>;
   likesYouCount(): Promise<number>;
   /** Exige plano Gold ou Platinum. */
   fetchLikesYou(): Promise<Profile[]>;

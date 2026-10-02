@@ -2,13 +2,21 @@ import { createContext, useCallback, useContext, useEffect, useMemo, useRef, use
 
 import { useToast } from '@/components/Toast';
 import { backend } from '@/services/backend';
+import { payments } from '@/services/payments';
 import { useSession } from '@/state/Session';
 import { colors } from '@/theme';
 import type { Conversation } from '@/types/chat';
-import type { Plan, Profile } from '@/types/user';
+import type { Plan, Profile, Usage } from '@/types/user';
 
 type AppState = {
   plan: Plan;
+  /** Kiss e Super Likes restantes hoje (null até carregar). */
+  usage: Usage | null;
+  refreshUsage: () => Promise<void>;
+  /** Depois de uma compra: aplica o plano novo na hora e recarrega o resto. */
+  applyPlan: (plan: Plan) => void;
+  /** Desconta um Kiss/Super Like do uso do dia, sem ir ao servidor. */
+  consume: (kind: 'like' | 'super') => void;
   conversations: Conversation[];
   likesCount: number;
   /** Conversas com mensagens não lidas + matches que ainda não conversaram. */
@@ -30,6 +38,7 @@ export function AppStateProvider({ children }: { children: ReactNode }) {
   const [plan, setPlan] = useState<Plan>('free');
   const [conversations, setConversations] = useState<Conversation[]>([]);
   const [likesCount, setLikesCount] = useState(0);
+  const [usage, setUsage] = useState<Usage | null>(null);
   const activeChat = useRef<string | null>(null);
   const known = useRef(new Set<string>());
   const conversationsRef = useRef(conversations);
@@ -37,12 +46,14 @@ export function AppStateProvider({ children }: { children: ReactNode }) {
 
   const refresh = useCallback(async () => {
     if (status !== 'ready' || !account) return;
-    const [p, c, l] = await Promise.allSettled([
+    const [p, c, l, u] = await Promise.allSettled([
       backend.loadPlan(account),
       backend.fetchConversations(),
       backend.likesYouCount(),
+      backend.loadUsage(),
     ]);
     if (p.status === 'fulfilled') setPlan(p.value);
+    if (u.status === 'fulfilled') setUsage(u.value);
     if (c.status === 'fulfilled') {
       c.value.forEach((conv) => known.current.add(conv.matchId));
       setConversations(c.value);
@@ -53,6 +64,20 @@ export function AppStateProvider({ children }: { children: ReactNode }) {
   useEffect(() => {
     refresh();
   }, [refresh]);
+
+  const refreshUsage = useCallback(async () => {
+    if (status !== 'ready') return;
+    setUsage(await backend.loadUsage().catch(() => null));
+  }, [status]);
+
+  // Compras ficam associadas à conta do Kissly (e se separam ao sair).
+  useEffect(() => {
+    if (status !== 'ready' || !account) return;
+    payments.identify(account.id).catch(() => {});
+    return () => {
+      payments.reset().catch(() => {});
+    };
+  }, [status, account]);
 
   // Mensagens e matches novos chegando em tempo real.
   useEffect(() => {
@@ -79,6 +104,20 @@ export function AppStateProvider({ children }: { children: ReactNode }) {
   const value = useMemo<AppState>(
     () => ({
       plan,
+      usage,
+      refreshUsage,
+      applyPlan: (next) => {
+        setPlan(next);
+        refresh();
+      },
+      consume: (kind) =>
+        setUsage((u) =>
+          !u
+            ? u
+            : kind === 'like'
+              ? { ...u, likesLeft: u.likesLeft === null ? null : Math.max(0, u.likesLeft - 1) }
+              : { ...u, supersLeft: Math.max(0, u.supersLeft - 1) },
+        ),
       conversations,
       likesCount,
       inboxBadge: conversations.filter((c) => c.unread > 0 || !c.lastMessageAt).length,
@@ -110,7 +149,7 @@ export function AppStateProvider({ children }: { children: ReactNode }) {
       clearUnread: (matchId) =>
         setConversations((list) => list.map((c) => (c.matchId === matchId ? { ...c, unread: 0 } : c))),
     }),
-    [plan, conversations, likesCount, refresh],
+    [plan, usage, refreshUsage, conversations, likesCount, refresh],
   );
 
   return <AppStateContext.Provider value={value}>{children}</AppStateContext.Provider>;

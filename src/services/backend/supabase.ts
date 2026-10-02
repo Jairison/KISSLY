@@ -15,6 +15,7 @@ import {
   type Plan,
   type Profile,
   type ShowMe,
+  type Usage,
   type UserProfile,
 } from '@/types/user';
 
@@ -46,7 +47,9 @@ const AUTH_MESSAGES: Record<string, string> = {
 function fail(error: AuthError | PostgrestError | Error | { message: string; hint?: string; code?: string }): never {
   const code = 'code' in error ? error.code : undefined;
   const hint = 'hint' in error ? error.hint : undefined;
-  if (hint === 'premium_required') throw new BackendError(error.message, 'premium_required');
+  if (hint === 'premium_required' || hint === 'limit_likes' || hint === 'limit_super') {
+    throw new BackendError(error.message, hint);
+  }
   if (code && AUTH_MESSAGES[code]) throw new BackendError(AUTH_MESSAGES[code], 'auth');
   if (/fetch|network/i.test(error.message)) {
     throw new BackendError('Sem conexão com o servidor. Verifique sua internet.', 'network');
@@ -99,6 +102,7 @@ type CardRow = {
   country: string;
   verified: boolean;
   distance_km?: number | null;
+  super_liked_you?: boolean;
 };
 
 const toUser = (row: ProfileRow, email: string): UserProfile => ({
@@ -134,6 +138,7 @@ const toCard = (row: CardRow): Profile => ({
   flag: flagFor(row.country),
   verified: row.verified,
   distanceKm: row.distance_km ?? null,
+  superLikedYou: Boolean(row.super_liked_you),
 });
 
 type MessageRow = {
@@ -397,6 +402,27 @@ export const supabaseBackend: Backend = {
     if (error) fail(error);
     if (!data || (data.expires_at && new Date(data.expires_at) < new Date())) return 'free';
     return data.plan as Plan;
+  },
+
+  async loadUsage(): Promise<Usage> {
+    const { data, error } = await db().rpc('my_usage');
+    if (error) fail(error);
+    const row = (data as { plan: Plan; likes_left: number | null; supers_left: number; resets_at: string; can_rewind: boolean }[])[0];
+    return {
+      plan: row.plan,
+      likesLeft: row.likes_left,
+      supersLeft: row.supers_left,
+      resetsAt: row.resets_at,
+      canRewind: row.can_rewind,
+    };
+  },
+
+  async rewind() {
+    const { data, error } = await db().rpc('rewind');
+    if (error) fail(error);
+    const row = (data as CardRow[])[0];
+    if (!row) throw new BackendError('Não há nenhum perfil para voltar');
+    return toCard(row);
   },
 
   async fetchDeck(scope) {

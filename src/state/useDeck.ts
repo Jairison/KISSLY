@@ -67,6 +67,8 @@ export function useDeck(scope: DiscoveryScope) {
     error,
     /** Remove o card do topo (depois de um swipe). */
     pop: () => setQueue((q) => q.slice(1)),
+    /** Devolve um card ao topo (ex.: limite atingido ou voltar perfil). */
+    unshift: (profile: Profile) => setQueue((q) => [profile, ...q.filter((p) => p.id !== profile.id)]),
     reload: () => load(true),
   };
 }

@@ -82,6 +82,7 @@ function RootNavigator() {
           <Stack.Screen name="chat/[matchId]" options={{ animation: 'slide_from_right' }} />
           <Stack.Screen name="person/[matchId]" options={{ presentation: 'modal' }} />
           <Stack.Screen name="report/[matchId]" options={{ presentation: 'modal' }} />
+          <Stack.Screen name="plans" options={{ presentation: 'modal' }} />
         </Stack.Protected>
 
         {/* Sempre acessíveis: abertas por links de e-mail e pelo login social */}
