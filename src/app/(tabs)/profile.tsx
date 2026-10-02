@@ -1,12 +1,15 @@
 import { Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
+import { router, type Href } from 'expo-router';
 import { Image } from 'expo-image';
 import { LinearGradient } from 'expo-linear-gradient';
 import { Ionicons } from '@expo/vector-icons';
 
-import { currentUser } from '@/data/profiles';
+import { useToast } from '@/components/Toast';
 import { useAppState } from '@/state/AppState';
+import { useCurrentUser, useSession } from '@/state/Session';
 import { colors, fonts, gradients, radii, spacing } from '@/theme';
+import { ageFromBirthdate, profileCompletion } from '@/types/user';
 
 type IconName = keyof typeof Ionicons.glyphMap;
 
@@ -19,22 +22,37 @@ const GOLD_PERKS: { icon: IconName; text: string }[] = [
 
 const PLAN_LABEL = { free: 'Kissly Free', plus: 'Kissly Plus', gold: 'Kissly Gold', platinum: 'Kissly Platinum' };
 
-const MENU = ['Editar perfil', 'Preferências de descoberta', 'Segurança e privacidade', 'Configurações'];
-
 export default function ProfileScreen() {
   const { plan } = useAppState();
-  const completion = 0.6;
+  const user = useCurrentUser();
+  const { account, signOut } = useSession();
+  const { show } = useToast();
+  const completion = profileCompletion(user);
+
+  const menu: { icon: IconName; label: string; href?: Href; soon?: string }[] = [
+    { icon: 'create-outline', label: 'Editar perfil', href: '/edit-profile' },
+    { icon: 'options-outline', label: 'Preferências de descoberta', href: '/filters' },
+    { icon: 'shield-checkmark-outline', label: 'Segurança e privacidade', soon: 'Verificação de perfil chega na Parte 6' },
+    { icon: 'notifications-outline', label: 'Notificações', soon: 'Notificações chegam na Parte 6' },
+  ];
 
   return (
     <SafeAreaView style={styles.screen} edges={['top']}>
       <ScrollView contentContainerStyle={styles.content}>
         <View style={styles.hero}>
-          <LinearGradient colors={gradients.brand} style={styles.ring}>
-            <Image source={currentUser.photo} style={styles.avatar} />
-          </LinearGradient>
-          <Text style={styles.name}>{currentUser.name}</Text>
+          <Pressable onPress={() => router.push('/edit-profile')}>
+            <LinearGradient colors={gradients.brand} style={styles.ring}>
+              <Image source={user.photos[0]} style={styles.avatar} />
+            </LinearGradient>
+            <View style={styles.editBadge}>
+              <Ionicons name="pencil" size={14} color={colors.background} />
+            </View>
+          </Pressable>
+          <Text style={styles.name}>
+            {user.name}, <Text style={styles.age}>{ageFromBirthdate(user.birthdate)}</Text>
+          </Text>
           <Text style={styles.location}>
-            {currentUser.city}, {currentUser.state} · {PLAN_LABEL[plan]}
+            {user.city}, {user.state} · {PLAN_LABEL[plan]}
           </Text>
 
           <View style={styles.progressTrack}>
@@ -45,7 +63,10 @@ export default function ProfileScreen() {
               style={[styles.progressFill, { width: `${completion * 100}%` }]}
             />
           </View>
-          <Text style={styles.progressText}>Perfil {Math.round(completion * 100)}% completo</Text>
+          <Text style={styles.progressText}>
+            Perfil {Math.round(completion * 100)}% completo
+            {completion < 1 ? ' · complete para aparecer mais' : ' ✨'}
+          </Text>
         </View>
 
         <LinearGradient colors={['#2A2116', '#16111C']} style={styles.goldCard}>
@@ -59,19 +80,30 @@ export default function ProfileScreen() {
               <Text style={styles.perkText}>{perk.text}</Text>
             </View>
           ))}
-          <Pressable>
+          <Pressable onPress={() => show('Os planos chegam na Parte 5', 'diamond')}>
             <LinearGradient colors={gradients.gold} start={{ x: 0, y: 0 }} end={{ x: 1, y: 1 }} style={styles.goldButton}>
               <Text style={styles.goldButtonText}>Conhecer os planos</Text>
             </LinearGradient>
           </Pressable>
         </LinearGradient>
 
-        {MENU.map((item) => (
-          <Pressable key={item} style={styles.row}>
-            <Text style={styles.rowText}>{item}</Text>
+        {menu.map((item) => (
+          <Pressable
+            key={item.label}
+            style={styles.row}
+            onPress={() => (item.href ? router.push(item.href) : show(item.soon!, item.icon))}
+          >
+            <Ionicons name={item.icon} size={20} color={colors.textMuted} />
+            <Text style={styles.rowText}>{item.label}</Text>
             <Ionicons name="chevron-forward" size={18} color={colors.textFaint} />
           </Pressable>
         ))}
+
+        <Pressable style={styles.row} onPress={signOut}>
+          <Ionicons name="log-out-outline" size={20} color={colors.danger} />
+          <Text style={[styles.rowText, { color: colors.danger }]}>Sair</Text>
+        </Pressable>
+        <Text style={styles.account}>Conectado como {account?.email}</Text>
       </ScrollView>
     </SafeAreaView>
   );
@@ -83,7 +115,21 @@ const styles = StyleSheet.create({
   hero: { alignItems: 'center', paddingVertical: spacing.lg },
   ring: { width: 128, height: 128, borderRadius: 64, alignItems: 'center', justifyContent: 'center' },
   avatar: { width: 118, height: 118, borderRadius: 59, borderWidth: 4, borderColor: colors.background },
+  editBadge: {
+    position: 'absolute',
+    right: 4,
+    bottom: 4,
+    width: 32,
+    height: 32,
+    borderRadius: 16,
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: colors.text,
+    borderWidth: 3,
+    borderColor: colors.background,
+  },
   name: { fontFamily: fonts.display, fontSize: 28, color: colors.text, marginTop: spacing.md },
+  age: { fontFamily: fonts.regular, fontSize: 24 },
   location: { fontFamily: fonts.medium, fontSize: 14, color: colors.textMuted, marginTop: 4 },
   progressTrack: {
     width: '70%',
@@ -112,10 +158,11 @@ const styles = StyleSheet.create({
   row: {
     flexDirection: 'row',
     alignItems: 'center',
-    justifyContent: 'space-between',
+    gap: spacing.md,
     paddingVertical: 18,
     borderBottomWidth: StyleSheet.hairlineWidth,
     borderBottomColor: colors.border,
   },
-  rowText: { fontFamily: fonts.medium, fontSize: 16, color: colors.text },
+  rowText: { flex: 1, fontFamily: fonts.medium, fontSize: 16, color: colors.text },
+  account: { fontFamily: fonts.regular, fontSize: 12, color: colors.textFaint, textAlign: 'center', marginTop: spacing.xl },
 });

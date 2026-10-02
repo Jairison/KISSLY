@@ -28,7 +28,21 @@
     "plugins": [
       "expo-router",
       "expo-image",
-      "expo-font"
+      "expo-font",
+      [
+        "expo-image-picker",
+        {
+          "photosPermission": "O Kissly precisa acessar suas fotos para você montar seu perfil.",
+          "cameraPermission": false,
+          "microphonePermission": false
+        }
+      ],
+      [
+        "expo-location",
+        {
+          "locationWhenInUsePermission": "O Kissly usa sua localização para mostrar pessoas perto de você."
+        }
+      ]
     ],
     "scheme": "kissly",
     "backgroundColor": "#0B0810",

@@ -1,4 +1,4 @@
-import { useMemo, useRef, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { Pressable, StyleSheet, Text, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useSharedValue } from 'react-native-reanimated';
@@ -10,22 +10,28 @@ import { ActionButtons } from '@/components/ActionButtons';
 import { Logo } from '@/components/Logo';
 import { ScopeSelector } from '@/components/ScopeSelector';
 import { SwipeCard, type SwipeCardHandle, type SwipeDirection } from '@/components/SwipeCard';
-import { Toast, useToast } from '@/components/Toast';
-import { filterByScope, profiles, type DiscoveryScope, type Profile } from '@/data/profiles';
+import { useToast } from '@/components/Toast';
+import { buildDeck, profiles, type DiscoveryScope, type Profile } from '@/data/profiles';
 import { useAppState } from '@/state/AppState';
+import { useCurrentUser, useSession } from '@/state/Session';
 import { colors, fonts, gradients, radii, spacing } from '@/theme';
 
 export default function DiscoverScreen() {
   const { plan, addMatch } = useAppState();
+  const user = useCurrentUser();
+  const { prefs } = useSession();
   const hasPremium = plan === 'gold' || plan === 'platinum';
 
   const [scope, setScope] = useState<DiscoveryScope>('state');
   const [index, setIndex] = useState(0);
-  const deck = useMemo(() => filterByScope(profiles, scope), [scope]);
+  const deck = useMemo(() => buildDeck(profiles, user, prefs, scope), [user, prefs, scope]);
+
+  // Filtros novos = baralho novo, recomeçando do primeiro perfil.
+  useEffect(() => setIndex(0), [deck]);
 
   const progress = useSharedValue(0);
   const topCard = useRef<SwipeCardHandle>(null);
-  const { toast, show } = useToast();
+  const { show } = useToast();
 
   const current = deck[index];
   const next = deck[index + 1];
@@ -54,7 +60,7 @@ export default function DiscoverScreen() {
     <SafeAreaView style={styles.screen} edges={['top']}>
       <View style={styles.header}>
         <Logo />
-        <Pressable style={styles.iconButton} onPress={() => show('Filtros de idade e distância chegam na Parte 2', 'options-outline')}>
+        <Pressable style={styles.iconButton} onPress={() => router.push('/filters')}>
           <Ionicons name="options-outline" size={22} color={colors.text} />
         </Pressable>
       </View>
@@ -94,7 +100,6 @@ export default function DiscoverScreen() {
         />
       </View>
 
-      <Toast toast={toast} />
     </SafeAreaView>
   );
 }
@@ -114,6 +119,9 @@ function EmptyDeck({ scope, onRestart, onExpand }: { scope: DiscoveryScope; onRe
           <Text style={styles.primaryButtonText}>Explorar o Brasil inteiro</Text>
         </Pressable>
       )}
+      <Pressable onPress={() => router.push('/filters')} style={styles.linkButton}>
+        <Text style={styles.linkText}>Ajustar filtros</Text>
+      </Pressable>
       <Pressable onPress={onRestart} style={styles.linkButton}>
         <Text style={styles.linkText}>Rever perfis</Text>
       </Pressable>

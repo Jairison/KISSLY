@@ -8,11 +8,13 @@ import { Ionicons } from '@expo/vector-icons';
 import * as Haptics from 'expo-haptics';
 import Animated, { FadeIn, FadeInUp, ZoomIn } from 'react-native-reanimated';
 
-import { currentUser, profiles } from '@/data/profiles';
+import { profiles } from '@/data/profiles';
+import { useCurrentUser } from '@/state/Session';
 import { colors, fonts, gradients, radii, spacing } from '@/theme';
 
 export default function MatchScreen() {
   const { id } = useLocalSearchParams<{ id: string }>();
+  const me = useCurrentUser();
   const profile = profiles.find((p) => p.id === id);
 
   useEffect(() => {
@@ -37,7 +39,7 @@ export default function MatchScreen() {
 
       <View style={styles.photos}>
         <Animated.View entering={ZoomIn.delay(250).springify()} style={[styles.photoFrame, styles.photoLeft]}>
-          <Image source={currentUser.photo} style={styles.photo} />
+          <Image source={me.photos[0]} style={styles.photo} />
         </Animated.View>
         <Animated.View entering={ZoomIn.delay(350).springify()} style={[styles.photoFrame, styles.photoRight]}>
           <Image source={profile.photos[0]} style={styles.photo} />

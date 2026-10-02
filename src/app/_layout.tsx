@@ -9,7 +9,9 @@ import {
 } from '@expo-google-fonts/playfair-display';
 import { Inter_400Regular, Inter_500Medium, Inter_600SemiBold, Inter_700Bold } from '@expo-google-fonts/inter';
 
+import { ToastProvider } from '@/components/Toast';
 import { AppStateProvider } from '@/state/AppState';
+import { SessionProvider, useSession } from '@/state/Session';
 import { colors } from '@/theme';
 
 SplashScreen.preventAutoHideAsync();
@@ -20,7 +22,7 @@ const theme = {
 };
 
 export default function RootLayout() {
-  const [loaded, error] = useFonts({
+  const [fontsLoaded, fontError] = useFonts({
     PlayfairDisplay_600SemiBold_Italic,
     PlayfairDisplay_700Bold,
     Inter_400Regular,
@@ -29,23 +31,51 @@ export default function RootLayout() {
     Inter_700Bold,
   });
 
-  useEffect(() => {
-    if (loaded || error) SplashScreen.hideAsync();
-  }, [loaded, error]);
-
-  if (!loaded && !error) return null;
+  if (!fontsLoaded && !fontError) return null;
 
   return (
     <GestureHandlerRootView style={{ flex: 1, backgroundColor: colors.background }}>
       <ThemeProvider value={theme}>
-        <AppStateProvider>
-          <StatusBar style="light" />
-          <Stack screenOptions={{ headerShown: false, contentStyle: { backgroundColor: colors.background } }}>
-            <Stack.Screen name="(tabs)" />
-            <Stack.Screen name="match/[id]" options={{ presentation: 'transparentModal', animation: 'fade' }} />
-          </Stack>
-        </AppStateProvider>
+        <SessionProvider>
+          <ToastProvider>
+            <StatusBar style="light" />
+            <RootNavigator />
+          </ToastProvider>
+        </SessionProvider>
       </ThemeProvider>
     </GestureHandlerRootView>
+  );
+}
+
+/** Cada grupo de telas só existe no status certo; o Expo Router redireciona sozinho. */
+function RootNavigator() {
+  const { status, account } = useSession();
+
+  useEffect(() => {
+    if (status !== 'loading') SplashScreen.hideAsync();
+  }, [status]);
+
+  if (status === 'loading') return null;
+
+  return (
+    // A key zera matches e estado em memória quando outra conta entra.
+    <AppStateProvider key={account?.id ?? 'guest'}>
+      <Stack screenOptions={{ headerShown: false, contentStyle: { backgroundColor: colors.background } }}>
+        <Stack.Protected guard={status === 'signedOut'}>
+          <Stack.Screen name="(auth)" />
+        </Stack.Protected>
+
+        <Stack.Protected guard={status === 'onboarding'}>
+          <Stack.Screen name="onboarding" options={{ gestureEnabled: false }} />
+        </Stack.Protected>
+
+        <Stack.Protected guard={status === 'ready'}>
+          <Stack.Screen name="(tabs)" />
+          <Stack.Screen name="edit-profile" options={{ animation: 'slide_from_right' }} />
+          <Stack.Screen name="filters" options={{ presentation: 'modal' }} />
+          <Stack.Screen name="match/[id]" options={{ presentation: 'transparentModal', animation: 'fade' }} />
+        </Stack.Protected>
+      </Stack>
+    </AppStateProvider>
   );
 }
