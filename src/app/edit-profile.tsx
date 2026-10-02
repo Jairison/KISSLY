@@ -89,7 +89,7 @@ export default function EditProfileScreen() {
 
           <Section title="Localização">
             <LocationPicker
-              value={{ city: form.city, state: form.state, country: form.country }}
+              value={{ city: form.city, state: form.state, country: form.country, lat: form.lat ?? null, lng: form.lng ?? null }}
               onChange={(place) => setForm((f) => ({ ...f, ...place }))}
             />
           </Section>

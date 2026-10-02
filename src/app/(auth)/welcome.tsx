@@ -1,3 +1,4 @@
+import { useState } from 'react';
 import { StyleSheet, Text, View, useWindowDimensions } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import Animated, { FadeIn, FadeInDown } from 'react-native-reanimated';
@@ -10,6 +11,7 @@ import { Logo } from '@/components/Logo';
 import { useToast } from '@/components/Toast';
 import { Button } from '@/components/ui/Button';
 import { profiles } from '@/data/profiles';
+import { BackendError, backend, type OAuthProvider } from '@/services/backend';
 import { colors, fonts, spacing } from '@/theme';
 
 const COLUMNS = 3;
@@ -19,6 +21,19 @@ export default function WelcomeScreen() {
   const { show } = useToast();
   const tile = width / 2.4;
   const photos = profiles.map((p) => p.photos[0]);
+  const [busy, setBusy] = useState<OAuthProvider | null>(null);
+
+  const social = async (provider: OAuthProvider) => {
+    setBusy(provider);
+    try {
+      // Se der certo, a sessão muda e o app segue sozinho para o cadastro do perfil ou para as abas.
+      await backend.signInWithProvider(provider);
+    } catch (e) {
+      show(e instanceof BackendError ? e.message : 'Não foi possível entrar agora', 'alert-circle', colors.danger);
+    } finally {
+      setBusy(null);
+    }
+  };
 
   return (
     <View style={styles.screen}>
@@ -42,6 +57,12 @@ export default function WelcomeScreen() {
 
       <SafeAreaView style={styles.content}>
         <Animated.View entering={FadeInDown.delay(200).springify()} style={styles.brand}>
+          {backend.mode === 'local' && (
+            <View style={styles.demo}>
+              <Ionicons name="flask-outline" size={12} color={colors.gold} />
+              <Text style={styles.demoText}>Modo demonstração · dados salvos só neste aparelho</Text>
+            </View>
+          )}
           <Logo size={44} />
           <Text style={styles.tagline}>Onde conexões viram histórias.</Text>
           <Text style={styles.sub}>Pessoas reais do seu estado, do Brasil e do mundo inteiro.</Text>
@@ -56,14 +77,16 @@ export default function WelcomeScreen() {
               title="Apple"
               variant="light"
               leading={<Ionicons name="logo-apple" size={20} color={colors.background} />}
-              onPress={() => show('Login com Apple chega junto com o Supabase, na Parte 3', 'logo-apple', colors.text)}
+              loading={busy === 'apple'}
+              onPress={() => social('apple')}
               style={{ flex: 1 }}
             />
             <Button
               title="Google"
               variant="light"
               leading={<Ionicons name="logo-google" size={18} color={colors.background} />}
-              onPress={() => show('Login com Google chega junto com o Supabase, na Parte 3', 'logo-google', colors.text)}
+              loading={busy === 'google'}
+              onPress={() => social('google')}
               style={{ flex: 1 }}
             />
           </View>
@@ -92,6 +115,19 @@ const styles = StyleSheet.create({
   tile: { borderRadius: 22, backgroundColor: colors.surface },
   content: { flex: 1, justifyContent: 'flex-end', paddingHorizontal: spacing.xl, paddingBottom: spacing.lg },
   brand: { gap: spacing.md, marginBottom: spacing.xxl },
+  demo: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    alignSelf: 'flex-start',
+    gap: 6,
+    paddingHorizontal: 10,
+    paddingVertical: 5,
+    borderRadius: 999,
+    backgroundColor: 'rgba(232,194,122,0.12)',
+    borderWidth: StyleSheet.hairlineWidth,
+    borderColor: 'rgba(232,194,122,0.4)',
+  },
+  demoText: { fontFamily: fonts.medium, fontSize: 11, color: colors.gold },
   tagline: { fontFamily: fonts.display, fontSize: 34, lineHeight: 42, color: colors.text, marginTop: spacing.sm },
   sub: { fontFamily: fonts.regular, fontSize: 16, lineHeight: 23, color: colors.textMuted },
   actions: { gap: spacing.md },

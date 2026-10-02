@@ -7,7 +7,7 @@ import { Ionicons } from '@expo/vector-icons';
 import { Button } from '@/components/ui/Button';
 import { ScreenHeader } from '@/components/ui/ScreenHeader';
 import { TextField } from '@/components/ui/TextField';
-import { AuthError, PASSWORD_MIN, isValidEmail } from '@/services/auth';
+import { BackendError, PASSWORD_MIN, isValidEmail } from '@/services/backend';
 import { useSession } from '@/state/Session';
 import { colors, fonts, radii, spacing } from '@/theme';
 
@@ -31,6 +31,7 @@ export default function SignupScreen() {
   const [touched, setTouched] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
+  const [confirmSent, setConfirmSent] = useState(false);
   const passwordRef = useRef<TextInput>(null);
   const confirmRef = useRef<TextInput>(null);
 
@@ -44,13 +45,33 @@ export default function SignupScreen() {
     setLoading(true);
     try {
       // Ao criar a conta, a sessão vai para "onboarding" e o app abre o cadastro do perfil.
-      await signUp(email, password);
+      const result = await signUp(email, password);
+      if (result.status === 'confirmEmail') setConfirmSent(true);
     } catch (e) {
-      setError(e instanceof AuthError ? e.message : 'Algo deu errado. Tente novamente.');
+      setError(e instanceof BackendError ? e.message : 'Algo deu errado. Tente novamente.');
     } finally {
       setLoading(false);
     }
   };
+
+  if (confirmSent) {
+    return (
+      <SafeAreaView style={styles.screen}>
+        <ScreenHeader />
+        <View style={styles.sent}>
+          <View style={styles.sentIcon}>
+            <Ionicons name="mail-unread-outline" size={36} color={colors.rose} />
+          </View>
+          <Text style={styles.title}>Confirme seu e-mail</Text>
+          <Text style={styles.sentText}>
+            Enviamos um link para <Text style={styles.termsLink}>{email.trim()}</Text>. Abra o e-mail, toque no link e
+            depois é só entrar com sua senha.
+          </Text>
+          <Button title="Ir para o login" onPress={() => router.replace('/login')} style={{ alignSelf: 'stretch' }} />
+        </View>
+      </SafeAreaView>
+    );
+  }
 
   return (
     <SafeAreaView style={styles.screen}>
@@ -166,6 +187,16 @@ const styles = StyleSheet.create({
     borderRadius: radii.sm,
     marginTop: spacing.sm,
   },
+  sent: { flex: 1, alignItems: 'center', justifyContent: 'center', gap: spacing.lg, padding: spacing.xl },
+  sentIcon: {
+    width: 80,
+    height: 80,
+    borderRadius: 40,
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: 'rgba(255,61,127,0.12)',
+  },
+  sentText: { fontFamily: fonts.regular, fontSize: 15, lineHeight: 22, color: colors.textMuted, textAlign: 'center' },
   switch: { alignItems: 'center', padding: spacing.sm },
   switchText: { fontFamily: fonts.regular, fontSize: 14, color: colors.textMuted },
   switchLink: { fontFamily: fonts.semibold, color: colors.text },

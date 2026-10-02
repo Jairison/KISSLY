@@ -1,6 +1,10 @@
 export type Gender = 'woman' | 'man' | 'nonbinary';
 export type ShowMe = 'women' | 'men' | 'everyone';
+export type Plan = 'free' | 'plus' | 'gold' | 'platinum';
+export type DiscoveryScope = 'state' | 'national' | 'international';
+export type SwipeDirection = 'left' | 'right' | 'up';
 
+/** O perfil de quem está usando o app. */
 export type UserProfile = {
   id: string;
   email: string;
@@ -16,6 +20,30 @@ export type UserProfile = {
   city: string;
   state: string;
   country: string;
+  /** Coordenadas do GPS; null quando a cidade foi digitada à mão. */
+  lat: number | null;
+  lng: number | null;
+};
+
+/** Perfil de outra pessoa, como aparece nos cards (sem data de nascimento nem coordenadas). */
+export type Profile = {
+  id: string;
+  name: string;
+  age: number;
+  gender: Gender;
+  photos: string[];
+  job?: string;
+  bio: string;
+  interests: string[];
+  city: string;
+  state: string;
+  country: string;
+  flag: string;
+  /** null quando uma das pessoas não compartilhou a localização. */
+  distanceKm: number | null;
+  verified: boolean;
+  /** Só nos dados de demonstração locais: já curtiu o usuário. */
+  likesYou?: boolean;
 };
 
 export type DiscoveryPrefs = {
@@ -34,6 +62,9 @@ export const PHOTO_LIMITS = { min: 2, max: 6 } as const;
 export const INTEREST_LIMITS = { min: 3, max: 5 } as const;
 export const BIO_MAX = 300;
 
+export const PREMIUM_PLANS: Plan[] = ['gold', 'platinum'];
+export const isPremium = (plan: Plan) => PREMIUM_PLANS.includes(plan);
+
 export function ageFromBirthdate(birthdate: string, today = new Date()): number {
   const [y, m, d] = birthdate.split('-').map(Number);
   let age = today.getFullYear() - y;
@@ -51,4 +82,10 @@ export function profileCompletion(p: UserProfile): number {
     p.city.trim().length > 0,
   ];
   return checks.filter(Boolean).length / checks.length;
+}
+
+export function formatDistance(km: number | null): string | null {
+  if (km === null) return null;
+  if (km < 1) return 'a menos de 1 km';
+  return km >= 1000 ? `${(km / 1000).toFixed(1).replace('.', ',')} mil km` : `${km} km`;
 }

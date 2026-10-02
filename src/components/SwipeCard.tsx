@@ -15,10 +15,8 @@ import { Image } from 'expo-image';
 import { LinearGradient } from 'expo-linear-gradient';
 import { Ionicons } from '@expo/vector-icons';
 
-import { formatDistance, type Profile } from '@/data/profiles';
+import { formatDistance, type Profile, type SwipeDirection } from '@/types/user';
 import { colors, fonts, gradients, radii, spacing } from '@/theme';
-
-export type SwipeDirection = 'left' | 'right' | 'up';
 
 export type SwipeCardHandle = {
   swipe: (direction: SwipeDirection) => void;
@@ -157,7 +155,8 @@ export function SwipeCard({ ref, profile, isTop, progress, onSwiped }: Props) {
             <View style={styles.metaRow}>
               <Ionicons name="location-outline" size={14} color={colors.textMuted} />
               <Text style={styles.meta}>
-                {profile.flag} {profile.city}, {profile.country} · {formatDistance(profile.distanceKm)}
+                {profile.flag} {profile.city}, {profile.country}
+                {profile.distanceKm !== null ? ` · ${formatDistance(profile.distanceKm)}` : ''}
               </Text>
             </View>
             <Text style={styles.bio} numberOfLines={2}>{profile.bio}</Text>

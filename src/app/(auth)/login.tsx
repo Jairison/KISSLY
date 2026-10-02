@@ -3,17 +3,15 @@ import { KeyboardAvoidingView, Platform, Pressable, ScrollView, StyleSheet, Text
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { router } from 'expo-router';
 
-import { useToast } from '@/components/Toast';
 import { Button } from '@/components/ui/Button';
 import { ScreenHeader } from '@/components/ui/ScreenHeader';
 import { TextField } from '@/components/ui/TextField';
-import { AuthError } from '@/services/auth';
+import { BackendError } from '@/services/backend';
 import { useSession } from '@/state/Session';
 import { colors, fonts, spacing } from '@/theme';
 
 export default function LoginScreen() {
   const { signIn } = useSession();
-  const { show } = useToast();
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [error, setError] = useState<string | null>(null);
@@ -26,7 +24,7 @@ export default function LoginScreen() {
     try {
       await signIn(email, password);
     } catch (e) {
-      setError(e instanceof AuthError ? e.message : 'Algo deu errado. Tente novamente.');
+      setError(e instanceof BackendError ? e.message : 'Algo deu errado. Tente novamente.');
     } finally {
       setLoading(false);
     }
@@ -66,7 +64,7 @@ export default function LoginScreen() {
               onSubmitEditing={submit}
               error={error}
             />
-            <Pressable onPress={() => show('Recuperação de senha chega com o Supabase, na Parte 3', 'key-outline')}>
+            <Pressable onPress={() => router.push({ pathname: '/forgot-password', params: { email } })}>
               <Text style={styles.forgot}>Esqueci minha senha</Text>
             </Pressable>
           </View>

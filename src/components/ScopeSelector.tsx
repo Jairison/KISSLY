@@ -1,7 +1,7 @@
 import { Pressable, StyleSheet, Text, View } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 
-import type { DiscoveryScope } from '@/data/profiles';
+import type { DiscoveryScope } from '@/types/user';
 import { colors, fonts, radii } from '@/theme';
 
 const OPTIONS: { key: DiscoveryScope; label: string; premium?: boolean }[] = [

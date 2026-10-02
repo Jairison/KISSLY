@@ -8,7 +8,8 @@ import { Button } from '@/components/ui/Button';
 import { BRAZIL_STATES, toUF } from '@/data/catalog';
 import { colors, fonts, radii, spacing } from '@/theme';
 
-export type PlaceValue = { city: string; state: string; country: string };
+/** lat/lng vêm do GPS; ao digitar a cidade à mão elas são descartadas. */
+export type PlaceValue = { city: string; state: string; country: string; lat: number | null; lng: number | null };
 
 type Props = {
   value: PlaceValue;
@@ -38,6 +39,8 @@ export function LocationPicker({ value, onChange }: Props) {
         city: place.city ?? place.subregion ?? '',
         state: (isBrazil ? toUF(place.region) : place.region) ?? '',
         country: isBrazil ? 'Brasil' : (place.country ?? ''),
+        lat: position.coords.latitude,
+        lng: position.coords.longitude,
       });
       setMessage('Localização encontrada ✓');
     } catch {
@@ -63,7 +66,7 @@ export function LocationPicker({ value, onChange }: Props) {
         icon="business-outline"
         placeholder="Ex.: São Paulo"
         value={value.city}
-        onChangeText={(city) => onChange({ ...value, city })}
+        onChangeText={(city) => onChange({ ...value, city, lat: null, lng: null })}
         autoCapitalize="words"
       />
 
@@ -74,7 +77,7 @@ export function LocationPicker({ value, onChange }: Props) {
             {value.state ? `${value.state}, ` : ''}
             {value.country}
           </Text>
-          <Pressable onPress={() => onChange({ city: '', state: '', country: 'Brasil' })}>
+          <Pressable onPress={() => onChange({ city: '', state: '', country: 'Brasil', lat: null, lng: null })}>
             <Text style={styles.link}>Estou no Brasil</Text>
           </Pressable>
         </View>
@@ -87,7 +90,7 @@ export function LocationPicker({ value, onChange }: Props) {
               return (
                 <Pressable
                   key={s.uf}
-                  onPress={() => onChange({ ...value, state: s.uf })}
+                  onPress={() => onChange({ ...value, state: s.uf, lat: null, lng: null })}
                   style={[styles.uf, active && styles.ufActive]}
                 >
                   <Text style={[styles.ufText, active && styles.ufTextActive]}>{s.uf}</Text>

@@ -1,27 +1,6 @@
-import { AGE_LIMITS, type DiscoveryPrefs, type Gender, type UserProfile } from '@/types/user';
+import { AGE_LIMITS, type DiscoveryPrefs, type DiscoveryScope, type Profile, type UserProfile } from '@/types/user';
 
-// Perfis de demonstração. Na Parte 3 serão substituídos por dados reais do Supabase.
-
-export type Profile = {
-  id: string;
-  name: string;
-  age: number;
-  gender: Gender;
-  photos: string[];
-  job?: string;
-  bio: string;
-  interests: string[];
-  city: string;
-  state: string;
-  country: string;
-  flag: string;
-  distanceKm: number;
-  verified: boolean;
-  /** Já curtiu o usuário: dar like gera match na hora. */
-  likesYou: boolean;
-};
-
-export type DiscoveryScope = 'state' | 'national' | 'international';
+// Perfis de demonstração, usados no modo local (sem Supabase configurado).
 
 const photo = (img: number) => `https://i.pravatar.cc/800?img=${img}`;
 
@@ -139,11 +118,8 @@ export function buildDeck(list: Profile[], viewer: Viewer, prefs: DiscoveryPrefs
     // No limite do slider (70+) não há teto de idade.
     if (prefs.ageMax < AGE_LIMITS.max && p.age > prefs.ageMax) return false;
     // A distância máxima vale para o modo Estadual; Nacional e Internacional ampliam o alcance de propósito.
-    if (scope === 'state' && prefs.maxDistanceKm !== null && p.distanceKm > prefs.maxDistanceKm) return false;
+    if (scope === 'state' && prefs.maxDistanceKm !== null && (p.distanceKm ?? 0) > prefs.maxDistanceKm) return false;
     return true;
   });
 }
 
-export function formatDistance(km: number): string {
-  return km >= 1000 ? `${(km / 1000).toFixed(1).replace('.', ',')} mil km` : `${km} km`;
-}

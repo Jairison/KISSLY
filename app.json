@@ -42,7 +42,8 @@
         {
           "locationWhenInUsePermission": "O Kissly usa sua localização para mostrar pessoas perto de você."
         }
-      ]
+      ],
+      "expo-web-browser"
     ],
     "scheme": "kissly",
     "backgroundColor": "#0B0810",

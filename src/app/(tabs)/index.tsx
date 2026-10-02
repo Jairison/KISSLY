@@ -1,5 +1,5 @@
-import { useEffect, useMemo, useRef, useState } from 'react';
-import { Pressable, StyleSheet, Text, View } from 'react-native';
+import { useRef, useState } from 'react';
+import { ActivityIndicator, Pressable, StyleSheet, Text, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useSharedValue } from 'react-native-reanimated';
 import { router } from 'expo-router';
@@ -9,32 +9,29 @@ import { Ionicons } from '@expo/vector-icons';
 import { ActionButtons } from '@/components/ActionButtons';
 import { Logo } from '@/components/Logo';
 import { ScopeSelector } from '@/components/ScopeSelector';
-import { SwipeCard, type SwipeCardHandle, type SwipeDirection } from '@/components/SwipeCard';
+import { SwipeCard, type SwipeCardHandle } from '@/components/SwipeCard';
 import { useToast } from '@/components/Toast';
-import { buildDeck, profiles, type DiscoveryScope, type Profile } from '@/data/profiles';
+import { BackendError, backend } from '@/services/backend';
 import { useAppState } from '@/state/AppState';
-import { useCurrentUser, useSession } from '@/state/Session';
+import { useDeck } from '@/state/useDeck';
 import { colors, fonts, gradients, radii, spacing } from '@/theme';
+import { isPremium, type DiscoveryScope, type Profile, type SwipeDirection } from '@/types/user';
+
+const DIRECTION = { left: 'nope', right: 'like', up: 'super' } as const;
 
 export default function DiscoverScreen() {
   const { plan, addMatch } = useAppState();
-  const user = useCurrentUser();
-  const { prefs } = useSession();
-  const hasPremium = plan === 'gold' || plan === 'platinum';
+  const hasPremium = isPremium(plan);
+  const { show } = useToast();
 
   const [scope, setScope] = useState<DiscoveryScope>('state');
-  const [index, setIndex] = useState(0);
-  const deck = useMemo(() => buildDeck(profiles, user, prefs, scope), [user, prefs, scope]);
-
-  // Filtros novos = baralho novo, recomeçando do primeiro perfil.
-  useEffect(() => setIndex(0), [deck]);
+  const { queue, status, error, pop, reload } = useDeck(scope);
 
   const progress = useSharedValue(0);
   const topCard = useRef<SwipeCardHandle>(null);
-  const { show } = useToast();
 
-  const current = deck[index];
-  const next = deck[index + 1];
+  const current = queue[0];
+  const next = queue[1];
 
   const changeScope = (value: DiscoveryScope) => {
     if (value === 'international' && !hasPremium) {
@@ -42,19 +39,60 @@ export default function DiscoverScreen() {
       return;
     }
     setScope(value);
-    setIndex(0);
   };
 
   const handleSwiped = (profile: Profile, direction: SwipeDirection) => {
     progress.value = 0;
-    setIndex((i) => i + 1);
-    if (direction === 'left') return;
+    pop();
     if (direction === 'up') show(`Super Like enviado para ${profile.name}`, 'star', colors.sky);
-    if (profile.likesYou) {
-      addMatch(profile);
-      router.push({ pathname: '/match/[id]', params: { id: profile.id } });
-    }
+
+    backend
+      .swipe(profile, DIRECTION[direction])
+      .then(({ matched }) => {
+        if (!matched) return;
+        addMatch(profile);
+        router.push({ pathname: '/match/[id]', params: { id: profile.id } });
+      })
+      .catch((e) =>
+        show(e instanceof BackendError ? e.message : 'Não foi possível registrar seu swipe', 'cloud-offline-outline', colors.danger),
+      );
   };
+
+  let content;
+  if (status === 'loading') {
+    content = (
+      <View style={styles.empty}>
+        <ActivityIndicator size="large" color={colors.rose} />
+        <Text style={styles.emptyText}>Procurando pessoas incríveis…</Text>
+      </View>
+    );
+  } else if (status === 'error') {
+    content = (
+      <View style={styles.empty}>
+        <Ionicons name="cloud-offline-outline" size={44} color={colors.textFaint} />
+        <Text style={styles.emptyText}>{error}</Text>
+        <Pressable style={styles.primaryButton} onPress={reload}>
+          <Text style={styles.primaryButtonText}>Tentar de novo</Text>
+        </Pressable>
+      </View>
+    );
+  } else if (!current) {
+    content = <EmptyDeck scope={scope} onReload={reload} onExpand={() => changeScope('national')} />;
+  } else {
+    // O card de trás é renderizado primeiro para ficar embaixo do card do topo.
+    content = [next, current].map((profile) =>
+      profile ? (
+        <SwipeCard
+          key={profile.id}
+          ref={profile === current ? topCard : undefined}
+          profile={profile}
+          isTop={profile === current}
+          progress={progress}
+          onSwiped={handleSwiped}
+        />
+      ) : null,
+    );
+  }
 
   return (
     <SafeAreaView style={styles.screen} edges={['top']}>
@@ -69,25 +107,7 @@ export default function DiscoverScreen() {
         <ScopeSelector value={scope} onChange={changeScope} hasPremium={hasPremium} />
       </View>
 
-      <View style={styles.deck}>
-        {current ? (
-          // O card de trás é renderizado primeiro para ficar embaixo do card do topo.
-          [next, current].map((profile) =>
-            profile ? (
-              <SwipeCard
-                key={profile.id}
-                ref={profile === current ? topCard : undefined}
-                profile={profile}
-                isTop={profile === current}
-                progress={progress}
-                onSwiped={handleSwiped}
-              />
-            ) : null,
-          )
-        ) : (
-          <EmptyDeck scope={scope} onRestart={() => setIndex(0)} onExpand={() => changeScope('national')} />
-        )}
-      </View>
+      <View style={styles.deck}>{content}</View>
 
       <View style={styles.actions}>
         <ActionButtons
@@ -99,12 +119,11 @@ export default function DiscoverScreen() {
           onBoost={() => show('Boost: seja destaque por 30 min no Kissly Gold', 'flash', colors.violet)}
         />
       </View>
-
     </SafeAreaView>
   );
 }
 
-function EmptyDeck({ scope, onRestart, onExpand }: { scope: DiscoveryScope; onRestart: () => void; onExpand: () => void }) {
+function EmptyDeck({ scope, onReload, onExpand }: { scope: DiscoveryScope; onReload: () => void; onExpand: () => void }) {
   return (
     <View style={styles.empty}>
       <LinearGradient colors={gradients.brand} style={styles.emptyIcon}>
@@ -122,8 +141,8 @@ function EmptyDeck({ scope, onRestart, onExpand }: { scope: DiscoveryScope; onRe
       <Pressable onPress={() => router.push('/filters')} style={styles.linkButton}>
         <Text style={styles.linkText}>Ajustar filtros</Text>
       </Pressable>
-      <Pressable onPress={onRestart} style={styles.linkButton}>
-        <Text style={styles.linkText}>Rever perfis</Text>
+      <Pressable onPress={onReload} style={styles.linkButton}>
+        <Text style={styles.linkText}>Atualizar</Text>
       </Pressable>
     </View>
   );

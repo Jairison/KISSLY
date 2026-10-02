@@ -13,7 +13,7 @@ const icon = (name: IconName, active: IconName) =>
   );
 
 export default function TabsLayout() {
-  const { matches } = useAppState();
+  const { matches, likesCount } = useAppState();
 
   return (
     <Tabs
@@ -31,7 +31,15 @@ export default function TabsLayout() {
       }}
     >
       <Tabs.Screen name="index" options={{ title: 'Descobrir', tabBarIcon: icon('flame-outline', 'flame') }} />
-      <Tabs.Screen name="likes" options={{ title: 'Curtidas', tabBarIcon: icon('sparkles-outline', 'sparkles') }} />
+      <Tabs.Screen
+        name="likes"
+        options={{
+          title: 'Curtidas',
+          tabBarIcon: icon('sparkles-outline', 'sparkles'),
+          tabBarBadge: likesCount || undefined,
+          tabBarBadgeStyle: { backgroundColor: colors.gold, color: colors.background, fontFamily: fonts.bold, fontSize: 10 },
+        }}
+      />
       <Tabs.Screen
         name="chats"
         options={{

@@ -1,7 +1,9 @@
 import { useEffect } from 'react';
 import { DarkTheme, SplashScreen, Stack, ThemeProvider } from 'expo-router';
 import { StatusBar } from 'expo-status-bar';
+import { StyleSheet, Text, View } from 'react-native';
 import { GestureHandlerRootView } from 'react-native-gesture-handler';
+import { Ionicons } from '@expo/vector-icons';
 import { useFonts } from 'expo-font';
 import {
   PlayfairDisplay_600SemiBold_Italic,
@@ -10,9 +12,10 @@ import {
 import { Inter_400Regular, Inter_500Medium, Inter_600SemiBold, Inter_700Bold } from '@expo-google-fonts/inter';
 
 import { ToastProvider } from '@/components/Toast';
+import { Button } from '@/components/ui/Button';
 import { AppStateProvider } from '@/state/AppState';
 import { SessionProvider, useSession } from '@/state/Session';
-import { colors } from '@/theme';
+import { colors, fonts, spacing } from '@/theme';
 
 SplashScreen.preventAutoHideAsync();
 
@@ -49,13 +52,14 @@ export default function RootLayout() {
 
 /** Cada grupo de telas só existe no status certo; o Expo Router redireciona sozinho. */
 function RootNavigator() {
-  const { status, account } = useSession();
+  const { status, account, retry, signOut } = useSession();
 
   useEffect(() => {
     if (status !== 'loading') SplashScreen.hideAsync();
   }, [status]);
 
   if (status === 'loading') return null;
+  if (status === 'error') return <LoadError onRetry={retry} onSignOut={signOut} />;
 
   return (
     // A key zera matches e estado em memória quando outra conta entra.
@@ -74,8 +78,38 @@ function RootNavigator() {
           <Stack.Screen name="edit-profile" options={{ animation: 'slide_from_right' }} />
           <Stack.Screen name="filters" options={{ presentation: 'modal' }} />
           <Stack.Screen name="match/[id]" options={{ presentation: 'transparentModal', animation: 'fade' }} />
+          <Stack.Screen name="delete-account" options={{ animation: 'slide_from_right' }} />
         </Stack.Protected>
+
+        {/* Sempre acessíveis: abertas por links de e-mail e pelo login social */}
+        <Stack.Screen name="reset-password" />
+        <Stack.Screen name="auth-callback" options={{ animation: 'none' }} />
       </Stack>
     </AppStateProvider>
   );
 }
+
+function LoadError({ onRetry, onSignOut }: { onRetry: () => void; onSignOut: () => void }) {
+  return (
+    <View style={errorStyles.screen}>
+      <Ionicons name="cloud-offline-outline" size={48} color={colors.textFaint} />
+      <Text style={errorStyles.title}>Não conseguimos carregar seu perfil</Text>
+      <Text style={errorStyles.text}>Verifique sua conexão com a internet e tente de novo.</Text>
+      <Button title="Tentar de novo" onPress={onRetry} style={{ alignSelf: 'stretch' }} />
+      <Button title="Sair da conta" variant="ghost" onPress={onSignOut} style={{ alignSelf: 'stretch' }} />
+    </View>
+  );
+}
+
+const errorStyles = StyleSheet.create({
+  screen: {
+    flex: 1,
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: spacing.lg,
+    padding: spacing.xl,
+    backgroundColor: colors.background,
+  },
+  title: { fontFamily: fonts.display, fontSize: 24, color: colors.text, textAlign: 'center' },
+  text: { fontFamily: fonts.regular, fontSize: 15, color: colors.textMuted, textAlign: 'center' },
+});

@@ -1,4 +1,6 @@
+import { useCallback } from 'react';
 import { ScrollView, StyleSheet, Text, View } from 'react-native';
+import { useFocusEffect } from 'expo-router';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Image } from 'expo-image';
 import { LinearGradient } from 'expo-linear-gradient';
@@ -8,7 +10,13 @@ import { useAppState } from '@/state/AppState';
 import { colors, fonts, gradients, spacing } from '@/theme';
 
 export default function ChatsScreen() {
-  const { matches } = useAppState();
+  const { matches, refresh } = useAppState();
+
+  useFocusEffect(
+    useCallback(() => {
+      refresh();
+    }, [refresh]),
+  );
 
   return (
     <SafeAreaView style={styles.screen} edges={['top']}>

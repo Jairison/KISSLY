@@ -38,3 +38,14 @@ export function toUF(region: string | null | undefined): string | null {
   const match = BRAZIL_STATES.find((s) => s.uf.toLowerCase() === clean || s.name.toLowerCase() === clean);
   return match?.uf ?? null;
 }
+
+const FLAGS: Record<string, string> = {
+  brasil: '🇧🇷', brazil: '🇧🇷', portugal: '🇵🇹', argentina: '🇦🇷', uruguai: '🇺🇾', uruguay: '🇺🇾',
+  chile: '🇨🇱', paraguai: '🇵🇾', paraguay: '🇵🇾', colômbia: '🇨🇴', colombia: '🇨🇴', méxico: '🇲🇽', mexico: '🇲🇽',
+  eua: '🇺🇸', 'estados unidos': '🇺🇸', 'united states': '🇺🇸', canadá: '🇨🇦', canada: '🇨🇦',
+  espanha: '🇪🇸', españa: '🇪🇸', spain: '🇪🇸', frança: '🇫🇷', france: '🇫🇷', itália: '🇮🇹', italia: '🇮🇹', italy: '🇮🇹',
+  alemanha: '🇩🇪', germany: '🇩🇪', 'reino unido': '🇬🇧', 'united kingdom': '🇬🇧', irlanda: '🇮🇪', ireland: '🇮🇪',
+  japão: '🇯🇵', japan: '🇯🇵', angola: '🇦🇴', moçambique: '🇲🇿', 'cabo verde': '🇨🇻',
+};
+
+export const flagFor = (country: string) => FLAGS[country.trim().toLowerCase()] ?? '🌍';

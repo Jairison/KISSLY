@@ -103,6 +103,9 @@ export default function ProfileScreen() {
           <Ionicons name="log-out-outline" size={20} color={colors.danger} />
           <Text style={[styles.rowText, { color: colors.danger }]}>Sair</Text>
         </Pressable>
+        <Pressable style={styles.deleteLink} onPress={() => router.push('/delete-account')}>
+          <Text style={styles.deleteText}>Excluir conta</Text>
+        </Pressable>
         <Text style={styles.account}>Conectado como {account?.email}</Text>
       </ScrollView>
     </SafeAreaView>
@@ -164,5 +167,7 @@ const styles = StyleSheet.create({
     borderBottomColor: colors.border,
   },
   rowText: { flex: 1, fontFamily: fonts.medium, fontSize: 16, color: colors.text },
-  account: { fontFamily: fonts.regular, fontSize: 12, color: colors.textFaint, textAlign: 'center', marginTop: spacing.xl },
+  deleteLink: { alignSelf: 'center', padding: spacing.md, marginTop: spacing.lg },
+  deleteText: { fontFamily: fonts.medium, fontSize: 13, color: colors.textFaint, textDecorationLine: 'underline' },
+  account: { fontFamily: fonts.regular, fontSize: 12, color: colors.textFaint, textAlign: 'center', marginTop: spacing.sm },
 });

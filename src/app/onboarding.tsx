@@ -40,6 +40,8 @@ type Draft = {
   city: string;
   state: string;
   country: string;
+  lat: number | null;
+  lng: number | null;
 };
 
 type Step = { title: string; subtitle: string; valid: boolean; content: ReactNode };
@@ -62,6 +64,8 @@ export default function OnboardingScreen() {
     city: '',
     state: '',
     country: 'Brasil',
+    lat: null,
+    lng: null,
   });
   const set = <K extends keyof Draft>(key: K, value: Draft[K]) => setDraft((d) => ({ ...d, [key]: value }));
 
@@ -155,7 +159,7 @@ export default function OnboardingScreen() {
       valid: draft.city.trim().length >= 2 && draft.state.length > 0,
       content: (
         <LocationPicker
-          value={{ city: draft.city, state: draft.state, country: draft.country }}
+          value={{ city: draft.city, state: draft.state, country: draft.country, lat: draft.lat, lng: draft.lng }}
           onChange={(place) => setDraft((d) => ({ ...d, ...place }))}
         />
       ),
@@ -202,6 +206,8 @@ export default function OnboardingScreen() {
           city: draft.city.trim(),
           state: draft.state,
           country: draft.country,
+          lat: draft.lat,
+          lng: draft.lng,
         },
         prefs,
       );

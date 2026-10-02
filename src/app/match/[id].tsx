@@ -8,14 +8,15 @@ import { Ionicons } from '@expo/vector-icons';
 import * as Haptics from 'expo-haptics';
 import Animated, { FadeIn, FadeInUp, ZoomIn } from 'react-native-reanimated';
 
-import { profiles } from '@/data/profiles';
+import { useAppState } from '@/state/AppState';
 import { useCurrentUser } from '@/state/Session';
 import { colors, fonts, gradients, radii, spacing } from '@/theme';
 
 export default function MatchScreen() {
   const { id } = useLocalSearchParams<{ id: string }>();
   const me = useCurrentUser();
-  const profile = profiles.find((p) => p.id === id);
+  const { matches } = useAppState();
+  const profile = matches.find((p) => p.id === id);
 
   useEffect(() => {
     Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success).catch(() => {});
