@@ -7,6 +7,7 @@ import { LinearGradient } from 'expo-linear-gradient';
 import { Ionicons } from '@expo/vector-icons';
 
 import { ActionButtons } from '@/components/ActionButtons';
+import { BoostSheet, useBoostCountdown } from '@/components/BoostSheet';
 import { Logo } from '@/components/Logo';
 import { ScopeSelector } from '@/components/ScopeSelector';
 import { SwipeCard, type SwipeCardHandle } from '@/components/SwipeCard';
@@ -23,12 +24,14 @@ const DIRECTION = { left: 'nope', right: 'like', up: 'super' } as const;
 const openPlans = (feature: Feature) => router.push({ pathname: '/plans', params: { feature } });
 
 export default function DiscoverScreen() {
-  const { plan, usage, addMatch, consume, refreshUsage } = useAppState();
+  const { plan, usage, passport, boost, addMatch, consume, refreshUsage } = useAppState();
+  const [boostOpen, setBoostOpen] = useState(false);
+  const boostCountdown = useBoostCountdown(boost?.activeUntil);
   const hasPremium = isPremium(plan);
   const { show } = useToast();
 
   const [scope, setScope] = useState<DiscoveryScope>('state');
-  const { queue, status, error, pop, unshift, reload } = useDeck(scope);
+  const { queue, status, error, pop, unshift, reload } = useDeck(scope, passport ? `${passport.city}-${passport.country}` : '');
   const [rewinding, setRewinding] = useState(false);
 
   const outOfLikes = usage?.likesLeft === 0;
@@ -128,9 +131,19 @@ export default function DiscoverScreen() {
     <SafeAreaView style={styles.screen} edges={['top']}>
       <View style={styles.header}>
         <Logo />
-        <Pressable style={styles.iconButton} onPress={() => router.push('/filters')}>
-          <Ionicons name="options-outline" size={22} color={colors.text} />
-        </Pressable>
+        <View style={styles.headerActions}>
+          <Pressable style={[styles.passport, passport && styles.passportOn]} onPress={() => router.push('/passport')}>
+            <Ionicons name="airplane" size={16} color={passport ? colors.background : colors.gold} />
+            {passport && (
+              <Text style={styles.passportText} numberOfLines={1}>
+                {passport.city}
+              </Text>
+            )}
+          </Pressable>
+          <Pressable style={styles.iconButton} onPress={() => router.push('/filters')}>
+            <Ionicons name="options-outline" size={22} color={colors.text} />
+          </Pressable>
+        </View>
       </View>
 
       <View style={styles.scope}>
@@ -147,9 +160,11 @@ export default function DiscoverScreen() {
           onNope={() => topCard.current?.swipe('left')}
           onSuper={() => (outOfSupers ? openPlans('super') : topCard.current?.swipe('up'))}
           onLike={() => (outOfLikes ? openPlans('likes') : topCard.current?.swipe('right'))}
-          onBoost={() => show('Boost: seja destaque por 30 min no Kissly Gold', 'flash', colors.violet)}
+          boostLabel={boostCountdown || undefined}
+          onBoost={() => setBoostOpen(true)}
         />
       </View>
+      <BoostSheet visible={boostOpen} onClose={() => setBoostOpen(false)} />
     </SafeAreaView>
   );
 }
@@ -188,6 +203,22 @@ const styles = StyleSheet.create({
     paddingHorizontal: spacing.xl,
     paddingTop: spacing.sm,
   },
+  headerActions: { flexDirection: 'row', alignItems: 'center', gap: spacing.sm },
+  passport: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    height: 40,
+    minWidth: 40,
+    paddingHorizontal: 12,
+    borderRadius: 20,
+    justifyContent: 'center',
+    backgroundColor: colors.surface,
+    borderWidth: StyleSheet.hairlineWidth,
+    borderColor: 'rgba(232,194,122,0.4)',
+  },
+  passportOn: { backgroundColor: colors.gold, borderColor: colors.gold, maxWidth: 160 },
+  passportText: { fontFamily: fonts.semibold, fontSize: 13, color: colors.background, flexShrink: 1 },
   iconButton: {
     width: 40,
     height: 40,

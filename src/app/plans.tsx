@@ -219,7 +219,9 @@ export default function PlansScreen() {
           <Text style={styles.legal}>
             A assinatura renova automaticamente pelo mesmo período e valor, a menos que seja cancelada até 24 horas
             antes do fim do período atual, nas configurações da sua conta da App Store ou do Google Play. Ao assinar,
-            você concorda com os Termos de Uso e a Política de Privacidade.
+            você concorda com os{' '}
+            <Text style={styles.legalLink} onPress={() => router.push({ pathname: '/legal/[doc]', params: { doc: 'terms' } })}>Termos de Uso</Text> e a{' '}
+            <Text style={styles.legalLink} onPress={() => router.push({ pathname: '/legal/[doc]', params: { doc: 'privacy' } })}>Política de Privacidade</Text>.
           </Text>
         </View>
       </SafeAreaView>
@@ -331,5 +333,6 @@ const styles = StyleSheet.create({
   cta: { minHeight: 56, borderRadius: radii.pill, alignItems: 'center', justifyContent: 'center' },
   ctaText: { fontFamily: fonts.bold, fontSize: 16 },
   unavailable: { fontFamily: fonts.medium, fontSize: 12, color: colors.textMuted, textAlign: 'center' },
+  legalLink: { textDecorationLine: 'underline' },
   legal: { fontFamily: fonts.regular, fontSize: 10, lineHeight: 14, color: colors.textFaint, textAlign: 'center' },
 });

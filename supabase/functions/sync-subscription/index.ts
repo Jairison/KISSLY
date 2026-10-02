@@ -4,7 +4,8 @@
 
 import { createClient } from 'npm:@supabase/supabase-js@2';
 
-import { json, syncSubscription } from '../_shared/revenuecat.ts';
+import { json } from '../_shared/admin.ts';
+import { syncSubscription } from '../_shared/revenuecat.ts';
 
 const CORS = {
   'Access-Control-Allow-Origin': '*',

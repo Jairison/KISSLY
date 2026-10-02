@@ -1,7 +1,8 @@
 // Recebe os eventos do RevenueCat (compra, renovação, cancelamento, expiração…)
 // e atualiza o plano da pessoa. Deploy: supabase functions deploy revenuecat-webhook --no-verify-jwt
 
-import { json, syncSubscription } from '../_shared/revenuecat.ts';
+import { json } from '../_shared/admin.ts';
+import { syncSubscription } from '../_shared/revenuecat.ts';
 
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 

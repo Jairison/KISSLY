@@ -7,6 +7,7 @@ import type { AuthError, PostgrestError, SupabaseClient } from '@supabase/supaba
 
 import { flagFor } from '@/data/catalog';
 import type { Conversation, Message } from '@/types/chat';
+import type { Passport, VerificationStatus } from '@/types/extras';
 import { supabase as client } from '@/lib/supabase';
 import {
   DEFAULT_PREFS,
@@ -47,7 +48,7 @@ const AUTH_MESSAGES: Record<string, string> = {
 function fail(error: AuthError | PostgrestError | Error | { message: string; hint?: string; code?: string }): never {
   const code = 'code' in error ? error.code : undefined;
   const hint = 'hint' in error ? error.hint : undefined;
-  if (hint === 'premium_required' || hint === 'limit_likes' || hint === 'limit_super') {
+  if (hint === 'premium_required' || hint === 'limit_likes' || hint === 'limit_super' || hint === 'limit_boost') {
     throw new BackendError(error.message, hint);
   }
   if (code && AUTH_MESSAGES[code]) throw new BackendError(AUTH_MESSAGES[code], 'auth');
@@ -539,5 +540,90 @@ export const supabaseBackend: Backend = {
   async report(profileId, reason, details) {
     const { error } = await db().from('reports').insert({ reported_id: profileId, reason, details: details.trim() });
     if (error) fail(error);
+  },
+
+  // ------------------------------------------------- passaporte e boost
+
+  async getPassport() {
+    const { data, error } = await db().from('passports').select('city, state, country, lat, lng').maybeSingle<Passport>();
+    if (error) fail(error);
+    return data;
+  },
+
+  async setPassport(passport) {
+    const userId = await requireUserId();
+    const { error } = passport
+      ? await db().from('passports').upsert({ user_id: userId, ...passport, updated_at: new Date().toISOString() })
+      : await db().from('passports').delete().eq('user_id', userId);
+    if (error) fail(error);
+  },
+
+  async boostStatus() {
+    const { data, error } = await db().rpc('boost_status');
+    if (error) fail(error);
+    const row = (data as { active_until: string | null; left_this_month: number }[])[0];
+    return { activeUntil: row?.active_until ?? null, leftThisMonth: row?.left_this_month ?? 0 };
+  },
+
+  async activateBoost() {
+    const { data, error } = await db().rpc('activate_boost');
+    if (error) fail(error);
+    return data as string;
+  },
+
+  // ---------------------------------------------------- notificações
+
+  async registerPushToken(token, platform) {
+    const { error } = await db().rpc('register_push_token', { p_token: token, p_platform: platform });
+    if (error) fail(error);
+  },
+
+  async unregisterPushToken(token) {
+    const { error } = await db().rpc('unregister_push_token', { p_token: token });
+    if (error) fail(error);
+  },
+
+  async loadNotificationSettings() {
+    const { data, error } = await db().from('notification_settings').select('new_matches, messages').maybeSingle();
+    if (error) fail(error);
+    return { newMatches: data?.new_matches ?? true, messages: data?.messages ?? true };
+  },
+
+  async saveNotificationSettings(settings) {
+    const userId = await requireUserId();
+    const { error } = await db().from('notification_settings').upsert({
+      user_id: userId,
+      new_matches: settings.newMatches,
+      messages: settings.messages,
+      updated_at: new Date().toISOString(),
+    });
+    if (error) fail(error);
+  },
+
+  // -------------------------------------------------------- verificação
+
+  async verificationStatus() {
+    const { data, error } = await db()
+      .from('verification_requests')
+      .select('status')
+      .order('created_at', { ascending: false })
+      .limit(1)
+      .maybeSingle();
+    if (error) fail(error);
+    return (data?.status as VerificationStatus | undefined) ?? 'none';
+  },
+
+  async submitVerification(selfieUri, pose) {
+    const userId = await requireUserId();
+    const path = `${userId}/${Crypto.randomUUID()}.jpg`;
+    const upload = await db()
+      .storage.from('verifications')
+      .upload(path, await readBytes(selfieUri), { contentType: 'image/jpeg' });
+    if (upload.error) fail(upload.error);
+    const { error } = await db().from('verification_requests').insert({ user_id: userId, pose, photo_path: path });
+    if (error) {
+      if (error.code === '23505') throw new BackendError('Você já tem uma verificação em análise.');
+      fail(error);
+    }
   },
 };

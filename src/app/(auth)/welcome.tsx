@@ -92,8 +92,9 @@ export default function WelcomeScreen() {
           </View>
 
           <Text style={styles.legal}>
-            Ao continuar, você confirma ter 18 anos ou mais e concorda com os Termos de Uso e a Política de Privacidade do
-            Kissly.
+            Ao continuar, você confirma ter 18 anos ou mais e concorda com os{' '}
+            <Text style={styles.legalLink} onPress={() => router.push({ pathname: '/legal/[doc]', params: { doc: 'terms' } })}>Termos de Uso</Text> e a{' '}
+            <Text style={styles.legalLink} onPress={() => router.push({ pathname: '/legal/[doc]', params: { doc: 'privacy' } })}>Política de Privacidade</Text> do Kissly.
           </Text>
         </Animated.View>
       </SafeAreaView>
@@ -132,6 +133,7 @@ const styles = StyleSheet.create({
   sub: { fontFamily: fonts.regular, fontSize: 16, lineHeight: 23, color: colors.textMuted },
   actions: { gap: spacing.md },
   socialRow: { flexDirection: 'row', gap: spacing.md },
+  legalLink: { textDecorationLine: 'underline', color: colors.textMuted },
   legal: {
     fontFamily: fonts.regular,
     fontSize: 11,

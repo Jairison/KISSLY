@@ -1,6 +1,7 @@
 import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
 
 import { backend, type Account, type ProfileDraft, type SignUpResult } from '@/services/backend';
+import { disablePush } from '@/services/push';
 import { DEFAULT_PREFS, type DiscoveryPrefs, type UserProfile } from '@/types/user';
 
 /**
@@ -77,6 +78,7 @@ export function SessionProvider({ children }: { children: ReactNode }) {
         await handleAccount(await backend.signIn(email, password));
       },
       signOut: async () => {
+        await disablePush().catch(() => {});
         await backend.signOut();
         await handleAccount(null);
       },

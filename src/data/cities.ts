@@ -1,0 +1,41 @@
+import type { Passport } from '@/types/extras';
+
+/** Destinos do Passaporte: capitais brasileiras e cidades do mundo com muitos brasileiros. */
+export const PASSPORT_CITIES: (Passport & { region: 'Brasil' | 'Mundo' })[] = [
+  // Brasil
+  { region: 'Brasil', city: 'São Paulo', state: 'SP', country: 'Brasil', lat: -23.5505, lng: -46.6333 },
+  { region: 'Brasil', city: 'Rio de Janeiro', state: 'RJ', country: 'Brasil', lat: -22.9068, lng: -43.1729 },
+  { region: 'Brasil', city: 'Belo Horizonte', state: 'MG', country: 'Brasil', lat: -19.9167, lng: -43.9345 },
+  { region: 'Brasil', city: 'Brasília', state: 'DF', country: 'Brasil', lat: -15.7939, lng: -47.8828 },
+  { region: 'Brasil', city: 'Salvador', state: 'BA', country: 'Brasil', lat: -12.9777, lng: -38.5016 },
+  { region: 'Brasil', city: 'Fortaleza', state: 'CE', country: 'Brasil', lat: -3.7319, lng: -38.5267 },
+  { region: 'Brasil', city: 'Recife', state: 'PE', country: 'Brasil', lat: -8.0476, lng: -34.877 },
+  { region: 'Brasil', city: 'Porto Alegre', state: 'RS', country: 'Brasil', lat: -30.0346, lng: -51.2177 },
+  { region: 'Brasil', city: 'Curitiba', state: 'PR', country: 'Brasil', lat: -25.4284, lng: -49.2733 },
+  { region: 'Brasil', city: 'Florianópolis', state: 'SC', country: 'Brasil', lat: -27.5954, lng: -48.548 },
+  { region: 'Brasil', city: 'Goiânia', state: 'GO', country: 'Brasil', lat: -16.6869, lng: -49.2648 },
+  { region: 'Brasil', city: 'Manaus', state: 'AM', country: 'Brasil', lat: -3.119, lng: -60.0217 },
+  { region: 'Brasil', city: 'Belém', state: 'PA', country: 'Brasil', lat: -1.4558, lng: -48.4902 },
+  { region: 'Brasil', city: 'Natal', state: 'RN', country: 'Brasil', lat: -5.7945, lng: -35.211 },
+  { region: 'Brasil', city: 'Vitória', state: 'ES', country: 'Brasil', lat: -20.3155, lng: -40.3128 },
+  // Mundo
+  { region: 'Mundo', city: 'Lisboa', state: 'Lisboa', country: 'Portugal', lat: 38.7223, lng: -9.1393 },
+  { region: 'Mundo', city: 'Porto', state: 'Porto', country: 'Portugal', lat: 41.1579, lng: -8.6291 },
+  { region: 'Mundo', city: 'Miami', state: 'FL', country: 'EUA', lat: 25.7617, lng: -80.1918 },
+  { region: 'Mundo', city: 'Nova York', state: 'NY', country: 'EUA', lat: 40.7128, lng: -74.006 },
+  { region: 'Mundo', city: 'Orlando', state: 'FL', country: 'EUA', lat: 28.5383, lng: -81.3792 },
+  { region: 'Mundo', city: 'Buenos Aires', state: 'BA', country: 'Argentina', lat: -34.6037, lng: -58.3816 },
+  { region: 'Mundo', city: 'Santiago', state: 'RM', country: 'Chile', lat: -33.4489, lng: -70.6693 },
+  { region: 'Mundo', city: 'Cidade do México', state: 'CDMX', country: 'México', lat: 19.4326, lng: -99.1332 },
+  { region: 'Mundo', city: 'Madri', state: 'MD', country: 'Espanha', lat: 40.4168, lng: -3.7038 },
+  { region: 'Mundo', city: 'Barcelona', state: 'CT', country: 'Espanha', lat: 41.3874, lng: 2.1686 },
+  { region: 'Mundo', city: 'Paris', state: 'IDF', country: 'França', lat: 48.8566, lng: 2.3522 },
+  { region: 'Mundo', city: 'Londres', state: 'ENG', country: 'Reino Unido', lat: 51.5072, lng: -0.1276 },
+  { region: 'Mundo', city: 'Dublin', state: 'L', country: 'Irlanda', lat: 53.3498, lng: -6.2603 },
+  { region: 'Mundo', city: 'Milão', state: 'MI', country: 'Itália', lat: 45.4642, lng: 9.19 },
+  { region: 'Mundo', city: 'Roma', state: 'RM', country: 'Itália', lat: 41.9028, lng: 12.4964 },
+  { region: 'Mundo', city: 'Berlim', state: 'BE', country: 'Alemanha', lat: 52.52, lng: 13.405 },
+  { region: 'Mundo', city: 'Toronto', state: 'ON', country: 'Canadá', lat: 43.6532, lng: -79.3832 },
+  { region: 'Mundo', city: 'Tóquio', state: 'TK', country: 'Japão', lat: 35.6762, lng: 139.6503 },
+  { region: 'Mundo', city: 'Luanda', state: 'LUA', country: 'Angola', lat: -8.839, lng: 13.2894 },
+];

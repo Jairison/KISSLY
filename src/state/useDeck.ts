@@ -10,7 +10,7 @@ const REFILL_AT = 3;
  * Fila de perfis da tela Descobrir. Recarrega quando o alcance, os filtros ou o
  * perfil mudam, e busca mais perfis quando restam poucos cards.
  */
-export function useDeck(scope: DiscoveryScope) {
+export function useDeck(scope: DiscoveryScope, reloadKey = '') {
   const { prefs, profile } = useSession();
   const [queue, setQueue] = useState<Profile[]>([]);
   const [status, setStatus] = useState<'loading' | 'ready' | 'error'>('loading');
@@ -55,7 +55,7 @@ export function useDeck(scope: DiscoveryScope) {
 
   useEffect(() => {
     load(true);
-  }, [load, prefs, profile?.showMe, profile?.state, profile?.country, profile?.lat, profile?.lng]);
+  }, [load, reloadKey, prefs, profile?.showMe, profile?.state, profile?.country, profile?.lat, profile?.lng]);
 
   useEffect(() => {
     if (status === 'ready' && queue.length <= REFILL_AT && !exhausted.current) load(false);

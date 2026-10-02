@@ -8,6 +8,7 @@ import { LIMITS } from '@/data/plans';
 import { buildDeck, profiles as demoProfiles } from '@/data/profiles';
 import { readDemoPlan } from '@/services/payments/demo';
 import type { ChatEvents, Conversation, Message } from '@/types/chat';
+import { BOOST_MINUTES, type NotificationSettings, type Passport, type VerificationStatus } from '@/types/extras';
 import { DEFAULT_PREFS, isPremium, type DiscoveryPrefs, type Plan, type Profile, type UserProfile } from '@/types/user';
 
 import { BackendError, type Account, type Backend } from './types';
@@ -19,6 +20,9 @@ const KEYS = {
   session: 'kissly.session',
   profile: (id: string) => `kissly.profile.${id}`,
   prefs: (id: string) => `kissly.prefs.${id}`,
+  passport: (id: string) => `kissly.passport.${id}`,
+  notifications: (id: string) => `kissly.notifications.${id}`,
+  verification: (id: string) => `kissly.verification.${id}`,
 };
 
 const normalize = (email: string) => email.trim().toLowerCase();
@@ -45,6 +49,10 @@ function dayStart() {
 }
 const countToday = (direction: 'like' | 'super') =>
   history.filter((h) => h.direction === direction && h.at >= dayStart()).length;
+
+/** Boosts da demonstração (em memória). */
+const boosts: number[] = [];
+const MONTHLY_BOOSTS: Record<Plan, number> = { free: 0, plus: 0, gold: 1, platinum: 3 };
 
 const currentPlan = (): Promise<Plan> => (current ? readDemoPlan(current.id) : Promise.resolve('free'));
 
@@ -238,7 +246,14 @@ export const localBackend: Backend = {
       throw new BackendError('O modo Internacional é exclusivo do Kissly Gold', 'premium_required');
     }
     const { profile, prefs } = await loadOwn();
-    return buildDeck(demoProfiles, profile, prefs, scope).filter((p) => !swiped.has(p.id));
+    const passport = isPremium(await currentPlan()) ? await readJSON<Passport>(KEYS.passport(profile.id)) : null;
+    if (!passport) return buildDeck(demoProfiles, profile, prefs, scope).filter((p) => !swiped.has(p.id));
+    // Com Passaporte, a pessoa “está” na cidade escolhida. As distâncias fictícias são de São Paulo,
+    // então ficam ocultas e o limite de distância não se aplica.
+    const viewer = { ...profile, state: passport.state, country: passport.country };
+    return buildDeck(demoProfiles, viewer, { ...prefs, maxDistanceKm: null }, scope)
+      .filter((p) => !swiped.has(p.id))
+      .map((p) => ({ ...p, distanceKm: null }));
   },
 
   async swipe(target, direction) {
@@ -329,5 +344,58 @@ export const localBackend: Backend = {
 
   async report() {
     // No modo demonstração não há moderação; a denúncia é apenas aceita.
+  },
+
+  getPassport: async () => (current ? readJSON<Passport>(KEYS.passport(current.id)) : null),
+
+  async setPassport(passport) {
+    const account = requireAccount();
+    if (passport) await writeJSON(KEYS.passport(account.id), passport);
+    else await AsyncStorage.removeItem(KEYS.passport(account.id));
+  },
+
+  async boostStatus() {
+    const monthStart = new Date(new Date().getFullYear(), new Date().getMonth(), 1).getTime();
+    const end = boosts.length ? boosts[boosts.length - 1] : 0;
+    const used = boosts.filter((ends) => ends - BOOST_MINUTES * 60_000 >= monthStart).length;
+    return {
+      activeUntil: end > Date.now() ? new Date(end).toISOString() : null,
+      leftThisMonth: Math.max(0, MONTHLY_BOOSTS[await currentPlan()] - used),
+    };
+  },
+
+  async activateBoost() {
+    const status = await localBackend.boostStatus();
+    if (MONTHLY_BOOSTS[await currentPlan()] === 0) {
+      throw new BackendError('O Boost faz parte do Kissly Gold', 'premium_required');
+    }
+    if (status.activeUntil) throw new BackendError('Seu Boost já está ativo');
+    if (status.leftThisMonth <= 0) throw new BackendError('Você já usou os Boosts deste mês', 'limit_boost');
+    const ends = Date.now() + BOOST_MINUTES * 60_000;
+    boosts.push(ends);
+    return new Date(ends).toISOString();
+  },
+
+  async registerPushToken() {},
+  async unregisterPushToken() {},
+
+  loadNotificationSettings: async () =>
+    (current ? await readJSON<NotificationSettings>(KEYS.notifications(current.id)) : null) ?? {
+      newMatches: true,
+      messages: true,
+    },
+
+  async saveNotificationSettings(settings) {
+    await writeJSON(KEYS.notifications(requireAccount().id), settings);
+  },
+
+  verificationStatus: async () =>
+    (current ? ((await AsyncStorage.getItem(KEYS.verification(current.id))) as VerificationStatus | null) : null) ?? 'none',
+
+  async submitVerification() {
+    const key = KEYS.verification(requireAccount().id);
+    await AsyncStorage.setItem(key, 'pending');
+    // Na demonstração, a “moderação” aprova sozinha em alguns segundos.
+    setTimeout(() => AsyncStorage.setItem(key, 'approved'), 5000);
   },
 };

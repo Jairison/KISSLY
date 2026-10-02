@@ -136,8 +136,8 @@ export default function SignupScreen() {
                 {accepted && <Ionicons name="checkmark" size={16} color="#fff" />}
               </View>
               <Text style={styles.termsText}>
-                Tenho 18 anos ou mais e aceito os <Text style={styles.termsLink}>Termos de Uso</Text> e a{' '}
-                <Text style={styles.termsLink}>Política de Privacidade</Text>.
+                Tenho 18 anos ou mais e aceito os <Text style={styles.termsLink} onPress={() => router.push({ pathname: '/legal/[doc]', params: { doc: 'terms' } })}>Termos de Uso</Text> e a{' '}
+                <Text style={styles.termsLink} onPress={() => router.push({ pathname: '/legal/[doc]', params: { doc: 'privacy' } })}>Política de Privacidade</Text>.
               </Text>
             </Pressable>
             {error && <Text style={styles.error}>{error}</Text>}

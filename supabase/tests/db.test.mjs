@@ -273,5 +273,77 @@ ok(deck.rows[1]?.name === 'Platina' && deck.rows[1]?.super_liked_you === false,
 usage = await usageOf(U5);
 ok(usage.supers_left === 10 && usage.likes_left === null, 'Platinum: 10 Super Likes e Kiss ilimitado', JSON.stringify(usage));
 
+// ------------------------------------------------------------- passaporte
+// U1 (Gold) vai para Lisboa: passa a ver portugueses no Estadual e a ser visto por lá.
+const U7 = '77777777-7777-4777-8777-777777777777'; // mora em Lisboa
+await db.exec(`insert into auth.users (id, email) values ('${U7}', 'u7@test.dev');`);
+await db.exec(`insert into public.profiles (id, name, birthdate, gender, show_me, photos, city, state, country, lat, lng)
+  values ('${U7}', 'Inês', '1995-05-05', 'woman', 'men', array['a','b'], 'Lisboa', 'Lisboa', 'Portugal', 38.72, -9.14)`);
+await db.exec(`update public.subscriptions set expires_at = now() + interval '30 days' where user_id = '${U1}'`);
+
+await as(U1, `insert into public.passports (user_id, city, state, country, lat, lng) values ($1, 'Lisboa', 'Lisboa', 'Portugal', 38.7223, -9.1393)`, [U1]);
+const lisbon = await as(U1, "select name, city, distance_km from public.get_deck('state', 50)");
+ok(lisbon.rows.some((r) => r.name === 'Inês') && lisbon.rows.every((r) => r.city === 'Lisboa'),
+  'Passaporte: no Estadual, U1 vê quem está em Lisboa', lisbon.rows.map((r) => `${r.name}(${r.distance_km}km)`).join(', '));
+const seenByLisbon = await as(U7, "select name, city from public.get_deck('state', 50)");
+ok(seenByLisbon.rows.some((r) => r.name === 'Jairison' && r.city === 'Lisboa'),
+  'Passaporte: quem está em Lisboa vê o U1 como se ele estivesse lá', JSON.stringify(seenByLisbon.rows));
+await expectError('Não dá para mexer no passaporte de outra pessoa',
+  () => as(U4, `insert into public.passports (user_id, city, country, lat, lng) values ($1, 'X', 'Y', 0, 0)`, [U1]), 'row-level security');
+
+await db.exec(`update public.subscriptions set expires_at = now() - interval '1 day' where user_id = '${U1}'`);
+const noPassport = await as(U1, "select city from public.get_deck('state', 50)");
+ok(noPassport.rows.every((r) => r.city !== 'Lisboa'), 'Sem Gold, o passaporte deixa de valer (volta a São Paulo)');
+await db.exec(`update public.subscriptions set expires_at = now() + interval '30 days' where user_id = '${U1}'`);
+await as(U1, 'delete from public.passports where user_id = $1', [U1]);
+
+// -------------------------------------------------------------------- boost
+await expectError('Boost exige Gold', () => as(U4, 'select public.activate_boost()'), 'Kissly Gold');
+let boost = (await as(U5, 'select * from public.boost_status()')).rows[0];
+ok(boost.left_this_month === 3 && boost.active_until === null, 'Platinum começa o mês com 3 Boosts', JSON.stringify(boost));
+await as(U5, 'select public.activate_boost()');
+boost = (await as(U5, 'select * from public.boost_status()')).rows[0];
+ok(boost.left_this_month === 2 && boost.active_until !== null, 'Ativar Boost consome 1 e fica ativo por 30 min', JSON.stringify(boost));
+await expectError('Não ativa dois Boosts ao mesmo tempo', () => as(U5, 'select public.activate_boost()'), 'já está ativo');
+await expectError('Não dá para criar Boost direto na tabela',
+  () => as(U5, `insert into public.boosts (user_id, ends_at) values ($1, now())`, [U5]), 'permission denied');
+
+// Quem está com Boost aparece antes (depois só de quem deu Super Like)
+const U8 = '88888888-8888-4888-8888-888888888888';
+await db.exec(`insert into auth.users (id, email) values ('${U8}', 'u8@test.dev');`);
+await as(U8, insertProfile, [U8, 'Observa', '1993-03-03', 'woman', 'men']);
+const boostedDeck = await as(U8, "select name from public.get_deck('state', 50)");
+ok(boostedDeck.rows[0]?.name === 'Platina', 'Perfil com Boost aparece primeiro', boostedDeck.rows.slice(0, 3).map((r) => r.name).join(', '));
+
+// --------------------------------------------------------------------- push
+await as(U1, "select public.register_push_token('ExponentPushToken[abc]', 'android')");
+await as(U5, "select public.register_push_token('ExponentPushToken[abc]', 'ios')");
+const owner = await db.query("select user_id, platform from public.push_tokens where token = 'ExponentPushToken[abc]'");
+ok(owner.rows[0].user_id === U5 && owner.rows[0].platform === 'ios', 'Token de push passa para quem entrou por último no aparelho');
+await expectError('Ninguém lê tokens de push pelo app', () => as(U1, 'select * from public.push_tokens'), 'permission denied');
+await as(U1, "select public.unregister_push_token('ExponentPushToken[abc]')");
+ok((await db.query("select count(*)::int n from public.push_tokens")).rows[0].n === 1, 'Só o dono remove o próprio token');
+await as(U5, "select public.unregister_push_token('ExponentPushToken[abc]')");
+ok((await db.query("select count(*)::int n from public.push_tokens")).rows[0].n === 0, 'Dono remove o token ao sair');
+
+await as(U1, 'insert into public.notification_settings (user_id, messages) values ($1, false)', [U1]);
+ok((await as(U1, 'select messages from public.notification_settings')).rows[0].messages === false, 'Preferências de notificação salvas');
+
+// ------------------------------------------------------------- verificação
+await expectError('Selfie precisa estar na própria pasta',
+  () => as(U4, "insert into public.verification_requests (pose, photo_path) values ('Joinha', $1)", [`${U1}/x.jpg`]), 'row-level security');
+await as(U4, "insert into public.verification_requests (pose, photo_path) values ('Faça um joinha', $1)", [`${U4}/selfie.jpg`]);
+ok(true, 'Envia pedido de verificação');
+await expectError('Só um pedido pendente por vez',
+  () => as(U4, "insert into public.verification_requests (pose, photo_path) values ('Outra', $1)", [`${U4}/2.jpg`]), 'duplicate key');
+await expectError('Ninguém se aprova sozinho',
+  () => as(U4, "update public.verification_requests set status = 'approved'"), 'permission denied');
+await db.exec(`update public.verification_requests set status = 'approved' where user_id = '${U4}'`);
+const verified = await db.query('select verified from public.profiles where id = $1', [U4]);
+const reviewed = await db.query('select reviewed_at from public.verification_requests where user_id = $1', [U4]);
+ok(verified.rows[0].verified === true && reviewed.rows[0].reviewed_at !== null, 'Aprovação da moderação acende o selo de verificado');
+await expectError('Selfie de verificação não vai para a pasta de outra pessoa',
+  () => as(U4, `insert into storage.objects (bucket_id, name) values ('verifications', '${U1}/x.jpg')`), 'row-level security');
+
 console.log(failures ? `\n${failures} FALHA(S)` : '\nTODOS OS TESTES PASSARAM');
 process.exit(failures ? 1 : 0);

@@ -11,6 +11,7 @@ import {
 } from '@expo-google-fonts/playfair-display';
 import { Inter_400Regular, Inter_500Medium, Inter_600SemiBold, Inter_700Bold } from '@expo-google-fonts/inter';
 
+import { PushBridge } from '@/components/PushBridge';
 import { ToastProvider } from '@/components/Toast';
 import { Button } from '@/components/ui/Button';
 import { AppStateProvider } from '@/state/AppState';
@@ -83,12 +84,17 @@ function RootNavigator() {
           <Stack.Screen name="person/[matchId]" options={{ presentation: 'modal' }} />
           <Stack.Screen name="report/[matchId]" options={{ presentation: 'modal' }} />
           <Stack.Screen name="plans" options={{ presentation: 'modal' }} />
+          <Stack.Screen name="passport" options={{ presentation: 'modal' }} />
+          <Stack.Screen name="notifications" options={{ animation: 'slide_from_right' }} />
+          <Stack.Screen name="verify" options={{ presentation: 'modal' }} />
         </Stack.Protected>
 
         {/* Sempre acessíveis: abertas por links de e-mail e pelo login social */}
         <Stack.Screen name="reset-password" />
         <Stack.Screen name="auth-callback" options={{ animation: 'none' }} />
+        <Stack.Screen name="legal/[doc]" options={{ animation: 'slide_from_right' }} />
       </Stack>
+      {status === 'ready' && <PushBridge />}
     </AppStateProvider>
   );
 }

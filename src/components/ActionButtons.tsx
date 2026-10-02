@@ -64,9 +64,11 @@ type Props = {
   disabled?: boolean;
   /** Super Likes restantes hoje. */
   supersLeft?: number;
+  /** Tempo restante do Boost ativo (ex.: "12:34"). */
+  boostLabel?: string;
 };
 
-export function ActionButtons({ onRewind, onNope, onSuper, onLike, onBoost, disabled, supersLeft }: Props) {
+export function ActionButtons({ onRewind, onNope, onSuper, onLike, onBoost, disabled, supersLeft, boostLabel }: Props) {
   return (
     <View style={styles.row}>
       <RoundButton icon="arrow-undo" color={colors.gold} size={46} onPress={onRewind} />
@@ -80,7 +82,7 @@ export function ActionButtons({ onRewind, onNope, onSuper, onLike, onBoost, disa
         badge={supersLeft !== undefined ? String(supersLeft) : undefined}
       />
       <RoundButton icon="heart" color="#fff" size={70} onPress={onLike} filled disabled={disabled} />
-      <RoundButton icon="flash" color={colors.violet} size={46} onPress={onBoost} />
+      <RoundButton icon="flash" color={colors.violet} size={46} onPress={onBoost} badge={boostLabel} />
     </View>
   );
 }

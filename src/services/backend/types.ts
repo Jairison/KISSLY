@@ -1,4 +1,5 @@
 import type { ChatChannel, ChatEvents, Conversation, Message, ReportReason } from '@/types/chat';
+import type { BoostStatus, NotificationSettings, Passport, VerificationStatus } from '@/types/extras';
 import type { DiscoveryPrefs, DiscoveryScope, Plan, Profile, Usage, UserProfile } from '@/types/user';
 
 export type Account = { id: string; email: string };
@@ -18,6 +19,7 @@ export type BackendErrorCode =
   | 'premium_required'
   | 'limit_likes'
   | 'limit_super'
+  | 'limit_boost'
   | 'network'
   | 'not_available'
   | 'unknown';
@@ -82,4 +84,22 @@ export interface Backend {
   subscribeInbox(onChange: (event: { type: 'message' | 'match'; matchId: string; fromMe: boolean }) => void): () => void;
   unmatch(matchId: string): Promise<void>;
   report(profileId: string, reason: ReportReason, details: string): Promise<void>;
+
+  // ---- Passaporte e Boost (Gold/Platinum)
+  getPassport(): Promise<Passport | null>;
+  /** null volta para a localização real. */
+  setPassport(passport: Passport | null): Promise<void>;
+  boostStatus(): Promise<BoostStatus>;
+  /** Devolve quando o Boost termina (ISO). */
+  activateBoost(): Promise<string>;
+
+  // ---- notificações
+  registerPushToken(token: string, platform: 'ios' | 'android'): Promise<void>;
+  unregisterPushToken(token: string): Promise<void>;
+  loadNotificationSettings(): Promise<NotificationSettings>;
+  saveNotificationSettings(settings: NotificationSettings): Promise<void>;
+
+  // ---- verificação de perfil
+  verificationStatus(): Promise<VerificationStatus>;
+  submitVerification(selfieUri: string, pose: string): Promise<void>;
 }

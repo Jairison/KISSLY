@@ -1,13 +1,16 @@
+import { useCallback, useState } from 'react';
 import { Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import { router, type Href } from 'expo-router';
+import { router, useFocusEffect, type Href } from 'expo-router';
 import { Image } from 'expo-image';
 import { LinearGradient } from 'expo-linear-gradient';
 import { Ionicons } from '@expo/vector-icons';
 
 import { useToast } from '@/components/Toast';
 import { PLANS, PLAN_LABEL } from '@/data/plans';
+import { backend } from '@/services/backend';
 import { PaymentError, payments } from '@/services/payments';
+import type { VerificationStatus } from '@/types/extras';
 import { useAppState } from '@/state/AppState';
 import { useCurrentUser, useSession } from '@/state/Session';
 import { colors, fonts, gradients, radii, spacing } from '@/theme';
@@ -23,11 +26,29 @@ export default function ProfileScreen() {
   const { show } = useToast();
   const completion = profileCompletion(user);
 
-  const menu: { icon: IconName; label: string; href?: Href; soon?: string }[] = [
+  const [verification, setVerification] = useState<VerificationStatus>('none');
+  useFocusEffect(
+    useCallback(() => {
+      backend.verificationStatus().then(setVerification).catch(() => {});
+    }, []),
+  );
+
+  const legal = (doc: 'terms' | 'privacy' | 'safety'): Href => ({ pathname: '/legal/[doc]', params: { doc } });
+  const menu: { icon: IconName; label: string; href: Href; hint?: string; tint?: string }[] = [
     { icon: 'create-outline', label: 'Editar perfil', href: '/edit-profile' },
+    {
+      icon: verification === 'approved' ? 'shield-checkmark' : 'shield-checkmark-outline',
+      label: 'Verificar perfil',
+      href: '/verify',
+      hint: { none: 'Ganhe o selo azul', pending: 'Em análise', approved: 'Verificado ✓', rejected: 'Tente de novo' }[verification],
+      tint: verification === 'approved' ? colors.sky : undefined,
+    },
     { icon: 'options-outline', label: 'Preferências de descoberta', href: '/filters' },
-    { icon: 'shield-checkmark-outline', label: 'Segurança e privacidade', soon: 'Verificação de perfil chega na Parte 6' },
-    { icon: 'notifications-outline', label: 'Notificações', soon: 'Notificações chegam na Parte 6' },
+    { icon: 'airplane-outline', label: 'Passaporte', href: '/passport', hint: 'Gold', tint: colors.gold },
+    { icon: 'notifications-outline', label: 'Notificações', href: '/notifications' },
+    { icon: 'heart-circle-outline', label: 'Dicas de segurança', href: legal('safety') },
+    { icon: 'document-text-outline', label: 'Termos de Uso', href: legal('terms') },
+    { icon: 'lock-closed-outline', label: 'Política de Privacidade', href: legal('privacy') },
   ];
 
   return (
@@ -44,6 +65,7 @@ export default function ProfileScreen() {
           </Pressable>
           <Text style={styles.name}>
             {user.name}, <Text style={styles.age}>{ageFromBirthdate(user.birthdate)}</Text>
+            {verification === 'approved' && <Text style={{ color: colors.sky }}> ✓</Text>}
           </Text>
           <Text style={styles.location}>
             {user.city}, {user.state} · {PLAN_LABEL[plan]}
@@ -82,10 +104,11 @@ export default function ProfileScreen() {
           <Pressable
             key={item.label}
             style={styles.row}
-            onPress={() => (item.href ? router.push(item.href) : show(item.soon!, item.icon))}
+            onPress={() => router.push(item.href)}
           >
-            <Ionicons name={item.icon} size={20} color={colors.textMuted} />
+            <Ionicons name={item.icon} size={20} color={item.tint ?? colors.textMuted} />
             <Text style={styles.rowText}>{item.label}</Text>
+            {item.hint && <Text style={[styles.rowHint, item.tint ? { color: item.tint } : null]}>{item.hint}</Text>}
             <Ionicons name="chevron-forward" size={18} color={colors.textFaint} />
           </Pressable>
         ))}
@@ -219,6 +242,7 @@ const styles = StyleSheet.create({
     borderBottomWidth: StyleSheet.hairlineWidth,
     borderBottomColor: colors.border,
   },
+  rowHint: { fontFamily: fonts.medium, fontSize: 13, color: colors.textFaint },
   rowText: { flex: 1, fontFamily: fonts.medium, fontSize: 16, color: colors.text },
   deleteLink: { alignSelf: 'center', padding: spacing.md, marginTop: spacing.lg },
   deleteText: { fontFamily: fonts.medium, fontSize: 13, color: colors.textFaint, textDecorationLine: 'underline' },

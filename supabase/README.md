@@ -24,6 +24,8 @@ um deve aparecer `Success. No rows returned`.
 3. [`20261003000000_plans.sql`](migrations/20261003000000_plans.sql): limites diários de cada plano, voltar
    perfil, Kiss prioritário e selo de Super Like. Para configurar a cobrança, veja
    [`docs/PAGAMENTOS.md`](../docs/PAGAMENTOS.md).
+4. [`20261004000000_extras.sql`](migrations/20261004000000_extras.sql): Passaporte, Boost, tokens e
+   preferências de notificação, e verificação de perfil (com um bucket privado para as selfies).
 
 Quando novas partes do app trouxerem arquivos novos nessa pasta, rode só os novos, também em ordem.
 
@@ -91,6 +93,32 @@ lançar, configure um SMTP próprio (Resend, SendGrid, Amazon SES…) em **Authe
   **Authentication → Sign In / Providers → Apple**.
 
 Enquanto um provedor não estiver ativado, o botão correspondente mostra um aviso de erro no app.
+
+## 6. Notificações push
+
+1. Publique a função e defina um segredo para ela:
+   ```bash
+   npx supabase secrets set PUSH_WEBHOOK_SECRET="outra-senha-longa"
+   npx supabase functions deploy push --no-verify-jwt
+   ```
+2. Em **Database → Webhooks → Create a new hook**, crie **dois** webhooks:
+   - tabela `matches`, evento **Insert**;
+   - tabela `messages`, evento **Insert**.
+
+   Nos dois, use o tipo **Supabase Edge Functions**, a função **push**, e adicione o header HTTP
+   `x-webhook-secret` com a mesma senha do passo 1.
+3. No app, rode `npx eas-cli@latest init` uma vez: isso cria o `projectId` que o push do Expo exige.
+
+Cada pessoa escolhe em **Perfil → Notificações** se quer ser avisada de matches e de mensagens.
+
+## 7. Moderação de verificações
+
+Pedidos de verificação ficam em **Table Editor → verification_requests** (`status = pending`). Para revisar:
+
+1. Abra a selfie em **Storage → verifications → (id da pessoa)**. O bucket é privado: só você vê.
+2. Compare a selfie com as fotos do perfil (`profiles.photos`) e com a pose pedida (coluna `pose`).
+3. Mude `status` para `approved` ou `rejected`. Ao aprovar, o selo azul aparece sozinho no perfil.
+   Ao rejeitar, você pode explicar o motivo em `reviewer_note`.
 
 ## Como os dados ficam protegidos
 

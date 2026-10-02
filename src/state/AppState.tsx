@@ -6,10 +6,15 @@ import { payments } from '@/services/payments';
 import { useSession } from '@/state/Session';
 import { colors } from '@/theme';
 import type { Conversation } from '@/types/chat';
+import type { BoostStatus, Passport } from '@/types/extras';
 import type { Plan, Profile, Usage } from '@/types/user';
 
 type AppState = {
   plan: Plan;
+  passport: Passport | null;
+  setPassport: (passport: Passport | null) => Promise<void>;
+  boost: BoostStatus | null;
+  activateBoost: () => Promise<void>;
   /** Kiss e Super Likes restantes hoje (null até carregar). */
   usage: Usage | null;
   refreshUsage: () => Promise<void>;
@@ -39,6 +44,8 @@ export function AppStateProvider({ children }: { children: ReactNode }) {
   const [conversations, setConversations] = useState<Conversation[]>([]);
   const [likesCount, setLikesCount] = useState(0);
   const [usage, setUsage] = useState<Usage | null>(null);
+  const [passport, setPassportState] = useState<Passport | null>(null);
+  const [boost, setBoost] = useState<BoostStatus | null>(null);
   const activeChat = useRef<string | null>(null);
   const known = useRef(new Set<string>());
   const conversationsRef = useRef(conversations);
@@ -46,14 +53,18 @@ export function AppStateProvider({ children }: { children: ReactNode }) {
 
   const refresh = useCallback(async () => {
     if (status !== 'ready' || !account) return;
-    const [p, c, l, u] = await Promise.allSettled([
+    const [p, c, l, u, pp, b] = await Promise.allSettled([
       backend.loadPlan(account),
       backend.fetchConversations(),
       backend.likesYouCount(),
       backend.loadUsage(),
+      backend.getPassport(),
+      backend.boostStatus(),
     ]);
     if (p.status === 'fulfilled') setPlan(p.value);
     if (u.status === 'fulfilled') setUsage(u.value);
+    if (pp.status === 'fulfilled') setPassportState(pp.value);
+    if (b.status === 'fulfilled') setBoost(b.value);
     if (c.status === 'fulfilled') {
       c.value.forEach((conv) => known.current.add(conv.matchId));
       setConversations(c.value);
@@ -104,6 +115,16 @@ export function AppStateProvider({ children }: { children: ReactNode }) {
   const value = useMemo<AppState>(
     () => ({
       plan,
+      passport,
+      setPassport: async (next) => {
+        await backend.setPassport(next);
+        setPassportState(next);
+      },
+      boost,
+      activateBoost: async () => {
+        const activeUntil = await backend.activateBoost();
+        setBoost((b) => ({ activeUntil, leftThisMonth: Math.max(0, (b?.leftThisMonth ?? 1) - 1) }));
+      },
       usage,
       refreshUsage,
       applyPlan: (next) => {
@@ -149,7 +170,7 @@ export function AppStateProvider({ children }: { children: ReactNode }) {
       clearUnread: (matchId) =>
         setConversations((list) => list.map((c) => (c.matchId === matchId ? { ...c, unread: 0 } : c))),
     }),
-    [plan, usage, refreshUsage, conversations, likesCount, refresh],
+    [plan, passport, boost, usage, refreshUsage, conversations, likesCount, refresh],
   );
 
   return <AppStateContext.Provider value={value}>{children}</AppStateContext.Provider>;

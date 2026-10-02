@@ -7,8 +7,15 @@
     "icon": "./assets/icon.png",
     "userInterfaceStyle": "dark",
     "ios": {
-      "supportsTablet": true,
-      "bundleIdentifier": "com.kissly.app"
+      "supportsTablet": false,
+      "bundleIdentifier": "com.kissly.app",
+      "buildNumber": "1",
+      "config": {
+        "usesNonExemptEncryption": false
+      },
+      "infoPlist": {
+        "ITSAppUsesNonExemptEncryption": false
+      }
     },
     "android": {
       "adaptiveIcon": {
@@ -18,7 +25,15 @@
         "monochromeImage": "./assets/android-icon-monochrome.png"
       },
       "predictiveBackGestureEnabled": false,
-      "package": "com.kissly.app"
+      "package": "com.kissly.app",
+      "versionCode": 1,
+      "permissions": [
+        "android.permission.CAMERA",
+        "android.permission.ACCESS_COARSE_LOCATION",
+        "android.permission.ACCESS_FINE_LOCATION",
+        "android.permission.POST_NOTIFICATIONS",
+        "android.permission.VIBRATE"
+      ]
     },
     "web": {
       "favicon": "./assets/favicon.png",
@@ -29,11 +44,12 @@
       "expo-router",
       "expo-image",
       "expo-font",
+      "expo-web-browser",
       [
         "expo-image-picker",
         {
           "photosPermission": "O Kissly precisa acessar suas fotos para você montar seu perfil.",
-          "cameraPermission": false,
+          "cameraPermission": "O Kissly usa a câmera para a selfie de verificação do perfil.",
           "microphonePermission": false
         }
       ],
@@ -43,12 +59,33 @@
           "locationWhenInUsePermission": "O Kissly usa sua localização para mostrar pessoas perto de você."
         }
       ],
-      "expo-web-browser"
+      [
+        "expo-notifications",
+        {
+          "icon": "./assets/android-icon-monochrome.png",
+          "color": "#FF3D7F"
+        }
+      ],
+      [
+        "expo-splash-screen",
+        {
+          "image": "./assets/splash-icon.png",
+          "imageWidth": 200,
+          "resizeMode": "contain",
+          "backgroundColor": "#0B0810"
+        }
+      ]
     ],
     "scheme": "kissly",
     "backgroundColor": "#0B0810",
     "experiments": {
       "typedRoutes": true
+    },
+    "description": "Kissly: app de relacionamento para conhecer pessoas do seu estado, do Brasil e do mundo.",
+    "extra": {
+      "eas": {
+        "projectId": ""
+      }
     }
   }
 }
