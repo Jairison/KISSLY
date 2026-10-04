@@ -13,7 +13,10 @@ matches entre pessoas de verdade. Leva uns 10 minutos.
 
 ## 2. Criar as tabelas
 
-No menu lateral, abra **SQL Editor**. Rode cada arquivo da pasta [`migrations`](migrations), **um de cada
+**Atalho para projeto novo:** rode o arquivo único [`setup.sql`](setup.sql), que junta todas as migrações
+abaixo, numa só query do **SQL Editor**.
+
+Ou, no menu lateral, abra **SQL Editor** e rode cada arquivo da pasta [`migrations`](migrations), **um de cada
 vez e nesta ordem**: clique em **New query**, cole o conteúdo inteiro do arquivo e clique em **Run**. Em cada
 um deve aparecer `Success. No rows returned`.
 
