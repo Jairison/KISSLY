@@ -1,7 +1,6 @@
 import { useState } from 'react';
-import { ActivityIndicator, Pressable, StyleSheet, Text, View } from 'react-native';
+import { ActivityIndicator, Platform, Pressable, StyleSheet, Text, View } from 'react-native';
 import { Image } from 'expo-image';
-import * as ImagePicker from 'expo-image-picker';
 import { ImageManipulator, SaveFormat } from 'expo-image-manipulator';
 import { LinearGradient } from 'expo-linear-gradient';
 import { Ionicons } from '@expo/vector-icons';
@@ -9,6 +8,10 @@ import { Ionicons } from '@expo/vector-icons';
 import { useToast } from '@/components/Toast';
 import { colors, fonts, gradients, radii, spacing } from '@/theme';
 import { PHOTO_LIMITS } from '@/types/user';
+import { PermissionError, pickImages, type PickedImage } from '@/utils/pickImages';
+
+/** O Storage aceita até 5 MB por foto (bucket "photos"). */
+const MAX_ORIGINAL_BYTES = 4.5 * 1024 * 1024;
 
 /** Reduz a foto para 1080px de largura em JPEG, deixando leve para salvar e enviar. */
 async function optimize(uri: string): Promise<string> {
@@ -30,28 +33,53 @@ export function PhotoGrid({ photos, onChange }: Props) {
     const remaining = PHOTO_LIMITS.max - photos.length;
     if (remaining <= 0) return;
 
-    const permission = await ImagePicker.requestMediaLibraryPermissionsAsync();
-    if (!permission.granted) {
-      show('Permita o acesso às fotos nas configurações do aparelho', 'images-outline', colors.danger);
+    let assets: PickedImage[] | null;
+    try {
+      assets = await pickImages({ limit: remaining });
+    } catch (e) {
+      show(
+        e instanceof PermissionError
+          ? 'Permita o acesso às fotos nas configurações do aparelho'
+          : 'Não foi possível abrir suas fotos. Tente de novo.',
+        'images-outline',
+        colors.danger,
+      );
       return;
     }
-
-    const result = await ImagePicker.launchImageLibraryAsync({
-      mediaTypes: ['images'],
-      allowsMultipleSelection: true,
-      selectionLimit: remaining,
-      quality: 1,
-    });
-    if (result.canceled) return;
+    if (!assets) return;
 
     setBusy(true);
-    try {
-      const picked = await Promise.all(result.assets.slice(0, remaining).map((a) => optimize(a.uri)));
-      onChange([...photos, ...picked]);
-    } catch {
-      show('Não foi possível carregar essa foto', 'alert-circle', colors.danger);
-    } finally {
-      setBusy(false);
+    // Uma foto por vez: no celular, várias fotos grandes ao mesmo tempo podem esgotar a memória.
+    // E uma foto com problema não impede as outras de entrarem.
+    const picked: string[] = [];
+    let heic = 0;
+    let failed = 0;
+    for (const asset of assets) {
+      try {
+        picked.push(await optimize(asset.uri));
+      } catch {
+        const isHeic = /hei[cf]/i.test(`${asset.mimeType ?? ''} ${asset.fileName ?? ''}`);
+        if (isHeic && Platform.OS === 'web') heic++;
+        // Sem conseguir otimizar, usa a original se ela couber no limite de envio.
+        else if (!asset.fileSize || asset.fileSize <= MAX_ORIGINAL_BYTES) picked.push(asset.uri);
+        else failed++;
+      }
+    }
+    setBusy(false);
+
+    if (picked.length) onChange([...photos, ...picked]);
+    if (heic) {
+      show(
+        `${heic === 1 ? 'Uma foto está' : `${heic} fotos estão`} em HEIC, formato que o navegador não abre. Escolha fotos JPG ou desligue "Fotos de alta eficiência" na câmera.`,
+        'image-outline',
+        colors.danger,
+      );
+    } else if (failed) {
+      show(
+        failed === 1 ? 'Não foi possível carregar uma das fotos. Tente outra.' : `Não foi possível carregar ${failed} fotos. Tente outras.`,
+        'alert-circle',
+        colors.danger,
+      );
     }
   };
 

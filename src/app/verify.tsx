@@ -1,10 +1,9 @@
 import { useEffect, useState } from 'react';
-import { ActivityIndicator, Platform, ScrollView, StyleSheet, Text, View } from 'react-native';
+import { ActivityIndicator, ScrollView, StyleSheet, Text, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import Animated, { FadeInDown } from 'react-native-reanimated';
 import { router } from 'expo-router';
 import { Image } from 'expo-image';
-import * as ImagePicker from 'expo-image-picker';
 import { ImageManipulator, SaveFormat } from 'expo-image-manipulator';
 import { Ionicons } from '@expo/vector-icons';
 
@@ -15,6 +14,7 @@ import { BackendError, backend } from '@/services/backend';
 import { useCurrentUser } from '@/state/Session';
 import { colors, fonts, radii, spacing } from '@/theme';
 import { VERIFICATION_POSES, type VerificationStatus } from '@/types/extras';
+import { PermissionError, pickImages, type PickedImage } from '@/utils/pickImages';
 
 const pickPose = () => VERIFICATION_POSES[Math.floor(Math.random() * VERIFICATION_POSES.length)];
 
@@ -31,26 +31,26 @@ export default function VerifyScreen() {
   }, []);
 
   const takeSelfie = async () => {
-    // No navegador não há câmera nativa: abre o seletor de arquivos.
-    const useCamera = Platform.OS !== 'web';
-    if (useCamera) {
-      const permission = await ImagePicker.requestCameraPermissionsAsync();
-      if (!permission.granted) {
-        show('Permita o acesso à câmera nas configurações do aparelho', 'camera-outline', colors.danger);
-        return;
-      }
+    let picked: PickedImage[] | null;
+    try {
+      picked = await pickImages({ limit: 1, camera: true });
+    } catch (e) {
+      show(
+        e instanceof PermissionError
+          ? 'Permita o acesso à câmera nas configurações do aparelho'
+          : 'Não foi possível abrir a câmera. Tente de novo.',
+        'camera-outline',
+        colors.danger,
+      );
+      return;
     }
-    const options: ImagePicker.ImagePickerOptions = {
-      mediaTypes: ['images'],
-      quality: 1,
-      cameraType: ImagePicker.CameraType.front,
-    };
-    const result = useCamera
-      ? await ImagePicker.launchCameraAsync(options)
-      : await ImagePicker.launchImageLibraryAsync(options);
-    if (result.canceled) return;
-    const image = await ImageManipulator.manipulate(result.assets[0].uri).resize({ width: 1080 }).renderAsync();
-    setSelfie((await image.saveAsync({ compress: 0.8, format: SaveFormat.JPEG })).uri);
+    if (!picked) return;
+    try {
+      const image = await ImageManipulator.manipulate(picked[0].uri).resize({ width: 1080 }).renderAsync();
+      setSelfie((await image.saveAsync({ compress: 0.8, format: SaveFormat.JPEG })).uri);
+    } catch {
+      show('Não foi possível usar essa foto. Tire outra, de preferência em JPG.', 'alert-circle', colors.danger);
+    }
   };
 
   const submit = async () => {

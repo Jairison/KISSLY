@@ -21,7 +21,8 @@ export function ToastProvider({ children }: { children: ReactNode }) {
   const show = useCallback<Show>((message, icon = 'sparkles', color = colors.gold) => {
     clearTimeout(timer.current);
     setToast({ id: Date.now(), message, icon, color });
-    timer.current = setTimeout(() => setToast(null), 2600);
+    // Mensagens longas ficam mais tempo na tela (~60 ms por letra, mínimo de 2,6 s).
+    timer.current = setTimeout(() => setToast(null), Math.max(2600, message.length * 60));
   }, []);
 
   useEffect(() => () => clearTimeout(timer.current), []);
