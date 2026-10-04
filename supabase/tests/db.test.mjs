@@ -47,6 +47,24 @@ for (const file of fs.readdirSync(`${ROOT}/migrations`).sort()) {
   await db.exec(fs.readFileSync(`${ROOT}/migrations/${file}`, 'utf8'));
   ok(true, `migração ${file}`);
 }
+// Antes de qualquer coisa rodar como administrador: um usuário comum cria o perfil.
+// (O Postgres guarda em cache a checagem de permissão das funções dentro da sessão; se o
+// administrador usar a função primeiro, um usuário sem permissão passaria despercebido.)
+{
+  const U0 = '00000000-0000-4000-8000-0000000000aa';
+  await db.exec(`insert into auth.users (id, email) values ('${U0}', 'u0@test.dev');`);
+  await db.exec(`reset role; select set_config('request.jwt.claim.sub', '${U0}', false); set role authenticated;`);
+  try {
+    await db.query(`insert into public.profiles (id, name, birthdate, gender, show_me, photos, city, state, country)
+      values ($1, 'Primeiro', '1990-01-01', 'man', 'women', array['a','b'], 'Natal', 'RN', 'Brasil')`, [U0]);
+    ok(true, 'Usuário comum cria o perfil logo após as migrações (sem cache de administrador)');
+  } catch (e) {
+    ok(false, 'Usuário comum cria o perfil logo após as migrações (sem cache de administrador)', e.message);
+  } finally {
+    await db.exec('reset role;');
+  }
+  await db.exec(`delete from auth.users where id = '${U0}'`);
+}
 await db.exec(fs.readFileSync(`${ROOT}/seed.sql`, 'utf8'));
 await db.exec(fs.readFileSync(`${ROOT}/seed.sql`, 'utf8')); // idempotente?
 const demos = (await db.query(`select count(*)::int n from public.profiles`)).rows[0].n;

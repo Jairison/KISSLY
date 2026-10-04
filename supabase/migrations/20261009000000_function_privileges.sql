@@ -10,6 +10,10 @@
 -- Daqui em diante: tudo fechado por padrão, e liberado só o que o app chama.
 -- =============================================================================
 
+-- O gatilho que barra menores de 18 roda com as permissões de quem cria o perfil e chama
+-- age_of(), que vai ser fechada abaixo. Passa a rodar com as permissões do dono.
+alter function public.check_adult() security definer set search_path = public;
+
 revoke execute on all functions in schema public from public, anon, authenticated;
 
 -- Funções que o app chama (supabase.rpc). Todas validam auth.uid() por dentro.
