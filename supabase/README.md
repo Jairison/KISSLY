@@ -29,6 +29,14 @@ um deve aparecer `Success. No rows returned`.
    [`docs/PAGAMENTOS.md`](../docs/PAGAMENTOS.md).
 4. [`20261004000000_extras.sql`](migrations/20261004000000_extras.sql): Passaporte, Boost, tokens e
    preferências de notificação, e verificação de perfil (com um bucket privado para as selfies).
+5. [`20261005000000_storage_select.sql`](migrations/20261005000000_storage_select.sql): correção para apagar fotos.
+6. [`20261006000000_blocks.sql`](migrations/20261006000000_blocks.sql): bloqueios.
+7. [`20261007000000_prompts.sql`](migrations/20261007000000_prompts.sql): perguntas do perfil.
+8. [`20261008000000_invites.sql`](migrations/20261008000000_invites.sql): convites com recompensa.
+9. [`20261009000000_function_privileges.sql`](migrations/20261009000000_function_privileges.sql): correção de
+   segurança (fecha as funções internas do banco).
+10. [`20261010000000_photo_moderation.sql`](migrations/20261010000000_photo_moderation.sql): registro da
+    moderação de fotos.
 
 Quando novas partes do app trouxerem arquivos novos nessa pasta, rode só os novos, também em ordem.
 
@@ -122,6 +130,32 @@ Pedidos de verificação ficam em **Table Editor → verification_requests** (`s
 2. Compare a selfie com as fotos do perfil (`profiles.photos`) e com a pose pedida (coluna `pose`).
 3. Mude `status` para `approved` ou `rejected`. Ao aprovar, o selo azul aparece sozinho no perfil.
    Ao rejeitar, você pode explicar o motivo em `reviewer_note`.
+
+## 8. E-mails em português
+
+O Supabase manda e-mails em inglês por padrão. Os modelos do Kissly estão em
+[`email-templates`](email-templates). Em **Authentication → Emails → Templates**, para cada modelo, cole o
+**assunto** e o **HTML** indicados em [`email-templates/ASSUNTOS.md`](email-templates/ASSUNTOS.md) e salve.
+
+## 9. Moderação automática de fotos
+
+Cada foto enviada é analisada antes de ir para o perfil. Nudez explícita, violência e símbolos de ódio são
+recusados; fotos de praia ou sem camisa passam normalmente.
+
+1. Crie uma conta grátis em [sightengine.com](https://sightengine.com) e copie o **API user** e o **API secret**
+   (em *API keys*).
+2. Publique a função com as chaves:
+   ```bash
+   npx supabase secrets set SIGHTENGINE_API_USER=... SIGHTENGINE_API_SECRET=...
+   npx supabase functions deploy moderate-photo --no-verify-jwt
+   ```
+3. **Opcional (reserva):** para pegar fotos enviadas por fora do app, crie um Database Webhook na tabela
+   `storage.objects`, evento **Insert**, apontando para a função **moderate-photo**, com o header
+   `x-webhook-secret` igual a um segredo definido com
+   `npx supabase secrets set MODERATION_WEBHOOK_SECRET="uma-senha-longa"`.
+
+Sem as chaves, ou com a função fora do ar, as fotos são aceitas normalmente (a moderação fica desligada). As
+recusas ficam na tabela **photo_moderation**, para a equipe revisar quem insiste em enviar conteúdo proibido.
 
 ## Como os dados ficam protegidos
 

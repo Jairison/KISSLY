@@ -13,6 +13,7 @@ import { ChoiceList, MultiChips } from '@/components/ui/ChipGroup';
 import { ScreenHeader } from '@/components/ui/ScreenHeader';
 import { TextField } from '@/components/ui/TextField';
 import { GENDER_OPTIONS, INTERESTS } from '@/data/catalog';
+import { BackendError } from '@/services/backend';
 import { useCurrentUser, useSession } from '@/state/Session';
 import { colors, fonts, spacing } from '@/theme';
 import { BIO_MAX, INTEREST_LIMITS, PHOTO_LIMITS } from '@/types/user';
@@ -48,9 +49,14 @@ export default function EditProfileScreen() {
       });
       show('Perfil atualizado', 'checkmark-circle', colors.mint);
       router.back();
-    } catch {
-      show('Não foi possível salvar. Tente de novo.', 'alert-circle', colors.danger);
+    } catch (e) {
       setSaving(false);
+      if (e instanceof BackendError && e.code === 'photo_rejected') {
+        setForm((f) => ({ ...f, photos: f.photos.filter((p) => !e.rejectedPhotos.includes(p)) }));
+        show(e.message, 'shield-outline', colors.danger);
+        return;
+      }
+      show(e instanceof BackendError ? e.message : 'Não foi possível salvar. Tente de novo.', 'alert-circle', colors.danger);
     }
   };
 

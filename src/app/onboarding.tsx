@@ -16,6 +16,7 @@ import { Button } from '@/components/ui/Button';
 import { ChoiceList, MultiChips } from '@/components/ui/ChipGroup';
 import { TextField } from '@/components/ui/TextField';
 import { GENDER_OPTIONS, INTERESTS, SHOW_ME_OPTIONS } from '@/data/catalog';
+import { BackendError } from '@/services/backend';
 import { useSession } from '@/state/Session';
 import { colors, fonts, gradients, radii, spacing } from '@/theme';
 import {
@@ -223,9 +224,20 @@ export default function OnboardingScreen() {
         prefs,
       );
       // O guard do layout raiz leva automaticamente para as abas.
-    } catch {
-      show('Não foi possível salvar seu perfil. Tente de novo.', 'alert-circle', colors.danger);
+    } catch (e) {
       setSaving(false);
+      if (e instanceof BackendError && e.code === 'photo_rejected') {
+        // Tira as fotos recusadas e volta para a etapa de fotos.
+        setDraft((d) => ({ ...d, photos: d.photos.filter((p) => !e.rejectedPhotos.includes(p)) }));
+        setIndex(steps.findIndex((s) => s.title === 'Suas melhores fotos'));
+        show(e.message, 'shield-outline', colors.danger);
+        return;
+      }
+      show(
+        e instanceof BackendError ? e.message : 'Não foi possível salvar seu perfil. Tente de novo.',
+        'alert-circle',
+        colors.danger,
+      );
     }
   };
 

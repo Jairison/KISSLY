@@ -213,19 +213,55 @@ async function readBytes(uri: string): Promise<ArrayBuffer> {
   return new File(uri).arrayBuffer();
 }
 
-/** Envia as fotos novas (locais) para o Storage e devolve todas como URLs públicas, na mesma ordem. */
+/** Pede à moderação automática para analisar a foto. A recusada já volta apagada. */
+async function moderate(path: string): Promise<boolean> {
+  const { data, error } = await db().functions.invoke('moderate-photo', { body: { path } });
+  // Função não publicada ou fora do ar: não trava o cadastro (a reserva do servidor cobre).
+  if (error) return true;
+  return (data as { ok?: boolean } | null)?.ok !== false;
+}
+
+/**
+ * Envia as fotos novas (locais) para o Storage, passa cada uma pela moderação e devolve
+ * todas como URLs públicas, na mesma ordem. Se alguma for recusada, nada é salvo e o erro
+ * diz quais fotos tirar.
+ */
 async function uploadPhotos(userId: string, photos: string[]): Promise<string[]> {
-  return Promise.all(
-    photos.map(async (uri) => {
-      if (isRemote(uri)) return uri;
-      const path = `${userId}/${Crypto.randomUUID()}.jpg`;
-      const { error } = await db()
-        .storage.from(BUCKET)
-        .upload(path, await readBytes(uri), { contentType: 'image/jpeg' });
-      if (error) fail(error);
-      return db().storage.from(BUCKET).getPublicUrl(path).data.publicUrl;
-    }),
-  );
+  const uploaded: string[] = [];
+  const rejected: string[] = [];
+  const result: string[] = [];
+  for (const uri of photos) {
+    if (isRemote(uri)) {
+      result.push(uri);
+      continue;
+    }
+    const path = `${userId}/${Crypto.randomUUID()}.jpg`;
+    const { error } = await db()
+      .storage.from(BUCKET)
+      .upload(path, await readBytes(uri), { contentType: 'image/jpeg' });
+    if (error) {
+      await removePhotos(uploaded).catch(() => {});
+      fail(error);
+    }
+    const url = db().storage.from(BUCKET).getPublicUrl(path).data.publicUrl;
+    if (await moderate(path)) {
+      uploaded.push(url);
+      result.push(url);
+    } else {
+      rejected.push(uri);
+    }
+  }
+  if (rejected.length) {
+    await removePhotos(uploaded).catch(() => {});
+    throw new BackendError(
+      rejected.length === 1
+        ? 'Uma foto foi recusada pela moderação (nudez, violência ou símbolo de ódio) e foi removida. Escolha outra.'
+        : `${rejected.length} fotos foram recusadas pela moderação e foram removidas. Escolha outras.`,
+      'photo_rejected',
+      rejected,
+    );
+  }
+  return result;
 }
 
 const storagePath = (url: string) => (url.includes(PUBLIC_PREFIX) ? url.split(PUBLIC_PREFIX)[1] : null);

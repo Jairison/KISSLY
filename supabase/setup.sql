@@ -1163,3 +1163,696 @@ to authenticated;
 create policy "Listar as próprias fotos" on storage.objects
   for select to authenticated
   using (bucket_id = 'photos' and (storage.foldername(name))[1] = (select auth.uid()::text));
+
+-- ============================== 20261006000000_blocks.sql
+-- =============================================================================
+-- Kissly · bloqueios
+--
+-- Bloquear vale nos dois sentidos: nenhum dos dois volta a ver o outro no baralho,
+-- o match (e a conversa) entre eles é apagado e a curtida pendente some de "Curtidas".
+-- A pessoa bloqueada não é avisada.
+-- =============================================================================
+
+create table public.blocks (
+  blocker_id uuid not null references public.profiles (id) on delete cascade,
+  blocked_id uuid not null references public.profiles (id) on delete cascade,
+  created_at timestamptz not null default now(),
+  primary key (blocker_id, blocked_id),
+  check (blocker_id <> blocked_id)
+);
+
+create index blocks_blocked_idx on public.blocks (blocked_id);
+
+alter table public.blocks enable row level security;
+
+-- Cada um vê só quem ele mesmo bloqueou. Gravação apenas pela função block_user().
+create policy "Ver os próprios bloqueios" on public.blocks
+  for select to authenticated using (blocker_id = (select auth.uid()));
+
+revoke all on public.blocks from anon, authenticated;
+grant select on public.blocks to authenticated;
+
+create or replace function public.is_blocked_between(a uuid, b uuid)
+returns boolean
+language sql
+stable
+security definer
+set search_path = public
+as $$
+  select exists (
+    select 1 from public.blocks
+    where (blocker_id = a and blocked_id = b) or (blocker_id = b and blocked_id = a)
+  );
+$$;
+
+create or replace function public.block_user(p_target uuid)
+returns void
+language plpgsql
+volatile
+security definer
+set search_path = public
+as $$
+declare
+  v_me uuid := auth.uid();
+begin
+  if v_me is null then
+    raise exception 'Não autenticado' using errcode = '28000';
+  end if;
+  if p_target = v_me then
+    raise exception 'Não é possível bloquear a si mesmo' using errcode = '22023';
+  end if;
+
+  insert into public.blocks (blocker_id, blocked_id) values (v_me, p_target)
+  on conflict do nothing;
+
+  -- Some do baralho de quem bloqueou (e não volta com "voltar perfil", que só desfaz o último swipe).
+  insert into public.swipes (swiper_id, swipee_id, direction) values (v_me, p_target, 'nope')
+  on conflict (swiper_id, swipee_id) do update set direction = 'nope';
+
+  delete from public.matches
+  where user_a = least(v_me, p_target) and user_b = greatest(v_me, p_target);
+end;
+$$;
+
+-- ------------------------------------------- baralho e curtidas sem bloqueados
+
+create or replace function public.get_deck(p_scope text default 'state', p_limit int default 20)
+returns table (
+  id uuid, name text, age int, gender text, bio text, job text, interests text[], photos text[],
+  city text, state text, country text, verified boolean, distance_km int, super_liked_you boolean
+)
+language plpgsql
+stable
+security definer
+set search_path = public
+as $$
+#variable_conflict use_column
+declare
+  me      public.profiles%rowtype;
+  here    record;
+  v_min   int := 18;
+  v_max   int := 70;
+  v_dist  int;
+begin
+  select * into me from public.profiles p where p.id = auth.uid();
+  if not found then
+    raise exception 'Perfil não encontrado' using errcode = 'P0002';
+  end if;
+  if p_scope not in ('state', 'national', 'international') then
+    raise exception 'Alcance inválido: %', p_scope using errcode = '22023';
+  end if;
+  if p_scope = 'international' and not (select l.international from public.plan_limits(public.current_plan(me.id)) l) then
+    raise exception 'O modo Internacional é exclusivo do Kissly Gold' using errcode = 'P0001', hint = 'premium_required';
+  end if;
+
+  select * into here from public.effective_location(me.id);
+
+  select pr.age_min, pr.age_max, pr.max_distance_km into v_min, v_max, v_dist
+    from public.preferences pr where pr.user_id = me.id;
+  v_min := coalesce(v_min, 18);
+  v_max := coalesce(v_max, 70);
+
+  return query
+  with people as (
+    select p.*, loc.city as e_city, loc.state as e_state, loc.country as e_country, loc.lat as e_lat, loc.lng as e_lng,
+           public.distance_km(here.lat, here.lng, loc.lat, loc.lng) as dist
+    from public.profiles p
+    cross join lateral public.effective_location(p.id) loc
+    where p.id <> me.id
+  )
+  select p.id, p.name, public.age_of(p.birthdate), p.gender, p.bio, p.job, p.interests, p.photos,
+         p.e_city, p.e_state, p.e_country, p.verified,
+         round(p.dist)::int,
+         coalesce(liked.direction = 'super', false)
+  from people p
+  left join public.swipes liked
+    on liked.swiper_id = p.id and liked.swipee_id = me.id and liked.direction <> 'nope'
+  where not exists (select 1 from public.swipes s where s.swiper_id = me.id and s.swipee_id = p.id)
+    and not public.is_blocked_between(me.id, p.id)
+    and (me.show_me = 'everyone' or (me.show_me = 'women' and p.gender = 'woman') or (me.show_me = 'men' and p.gender = 'man'))
+    and (p.show_me = 'everyone' or (p.show_me = 'women' and me.gender = 'woman') or (p.show_me = 'men' and me.gender = 'man'))
+    and public.age_of(p.birthdate) >= v_min
+    and (v_max >= 70 or public.age_of(p.birthdate) <= v_max)
+    and case p_scope
+          when 'state' then p.e_country = here.country and p.e_state = here.state
+          when 'national' then p.e_country = here.country
+          else p.e_country <> here.country
+        end
+    and (p_scope <> 'state' or v_dist is null or coalesce(p.dist <= v_dist, true))
+  order by
+    (liked.direction = 'super') desc nulls last,
+    public.is_boosted(p.id) desc,
+    (liked.swiper_id is not null and (select l.priority from public.plan_limits(public.current_plan(p.id)) l)) desc nulls last,
+    case when p_scope = 'state' then p.dist end asc nulls last,
+    p.last_active_at desc
+  limit least(greatest(p_limit, 1), 50);
+end;
+$$;
+
+create or replace function public.likes_you_count()
+returns int
+language sql
+stable
+security definer
+set search_path = public
+as $$
+  select count(*)::int
+  from public.swipes s
+  where s.swipee_id = auth.uid()
+    and s.direction <> 'nope'
+    and not exists (
+      select 1 from public.swipes mine where mine.swiper_id = auth.uid() and mine.swipee_id = s.swiper_id
+    )
+    and not public.is_blocked_between(auth.uid(), s.swiper_id);
+$$;
+
+create or replace function public.get_likes_you()
+returns table (
+  id uuid, name text, age int, gender text, bio text, job text, interests text[], photos text[],
+  city text, state text, country text, verified boolean, super_like boolean
+)
+language plpgsql
+stable
+security definer
+set search_path = public
+as $$
+#variable_conflict use_column
+begin
+  if public.current_plan(auth.uid()) not in ('gold', 'platinum') then
+    raise exception 'Ver quem curtiu você é exclusivo do Kissly Gold' using errcode = 'P0001', hint = 'premium_required';
+  end if;
+
+  return query
+  select p.id, p.name, public.age_of(p.birthdate), p.gender, p.bio, p.job, p.interests, p.photos,
+         p.city, p.state, p.country, p.verified, s.direction = 'super'
+  from public.swipes s
+  join public.profiles p on p.id = s.swiper_id
+  where s.swipee_id = auth.uid()
+    and s.direction <> 'nope'
+    and not exists (
+      select 1 from public.swipes mine where mine.swiper_id = auth.uid() and mine.swipee_id = s.swiper_id
+    )
+    and not public.is_blocked_between(auth.uid(), s.swiper_id)
+  order by s.direction = 'super' desc, s.created_at desc;
+end;
+$$;
+
+-- ---------------------------------------------------------------- permissões
+
+revoke execute on function public.is_blocked_between(uuid, uuid), public.block_user(uuid) from public, anon;
+grant execute on function public.block_user(uuid) to authenticated;
+
+-- ============================== 20261007000000_prompts.sql
+-- =============================================================================
+-- Kissly · perguntas do perfil ("Meu domingo ideal é…")
+--
+-- Até 3 perguntas por perfil, guardadas como [{ "question": "...", "answer": "..." }].
+-- As funções que devolvem cards passam a incluir a coluna `prompts`.
+-- =============================================================================
+
+create or replace function public.valid_prompts(p jsonb)
+returns boolean
+language sql
+immutable
+as $$
+  select jsonb_typeof(p) = 'array'
+     and jsonb_array_length(p) <= 3
+     and not exists (
+       select 1 from jsonb_array_elements(p) e
+       where jsonb_typeof(e) <> 'object'
+          or jsonb_typeof(e -> 'question') <> 'string'
+          or jsonb_typeof(e -> 'answer') <> 'string'
+          or char_length(e ->> 'question') not between 3 and 80
+          or char_length(btrim(e ->> 'answer')) not between 1 and 150
+     );
+$$;
+
+alter table public.profiles
+  add column prompts jsonb not null default '[]'::jsonb check (public.valid_prompts(prompts));
+
+grant insert (prompts), update (prompts) on public.profiles to authenticated;
+
+-- ------------------------------------------------------------ baralho
+
+drop function if exists public.get_deck(text, int);
+
+create function public.get_deck(p_scope text default 'state', p_limit int default 20)
+returns table (
+  id uuid, name text, age int, gender text, bio text, job text, interests text[], photos text[],
+  city text, state text, country text, verified boolean, distance_km int, super_liked_you boolean, prompts jsonb
+)
+language plpgsql
+stable
+security definer
+set search_path = public
+as $$
+#variable_conflict use_column
+declare
+  me      public.profiles%rowtype;
+  here    record;
+  v_min   int := 18;
+  v_max   int := 70;
+  v_dist  int;
+begin
+  select * into me from public.profiles p where p.id = auth.uid();
+  if not found then
+    raise exception 'Perfil não encontrado' using errcode = 'P0002';
+  end if;
+  if p_scope not in ('state', 'national', 'international') then
+    raise exception 'Alcance inválido: %', p_scope using errcode = '22023';
+  end if;
+  if p_scope = 'international' and not (select l.international from public.plan_limits(public.current_plan(me.id)) l) then
+    raise exception 'O modo Internacional é exclusivo do Kissly Gold' using errcode = 'P0001', hint = 'premium_required';
+  end if;
+
+  select * into here from public.effective_location(me.id);
+
+  select pr.age_min, pr.age_max, pr.max_distance_km into v_min, v_max, v_dist
+    from public.preferences pr where pr.user_id = me.id;
+  v_min := coalesce(v_min, 18);
+  v_max := coalesce(v_max, 70);
+
+  return query
+  with people as (
+    select p.*, loc.city as e_city, loc.state as e_state, loc.country as e_country, loc.lat as e_lat, loc.lng as e_lng,
+           public.distance_km(here.lat, here.lng, loc.lat, loc.lng) as dist
+    from public.profiles p
+    cross join lateral public.effective_location(p.id) loc
+    where p.id <> me.id
+  )
+  select p.id, p.name, public.age_of(p.birthdate), p.gender, p.bio, p.job, p.interests, p.photos,
+         p.e_city, p.e_state, p.e_country, p.verified,
+         round(p.dist)::int,
+         coalesce(liked.direction = 'super', false),
+         p.prompts
+  from people p
+  left join public.swipes liked
+    on liked.swiper_id = p.id and liked.swipee_id = me.id and liked.direction <> 'nope'
+  where not exists (select 1 from public.swipes s where s.swiper_id = me.id and s.swipee_id = p.id)
+    and not public.is_blocked_between(me.id, p.id)
+    and (me.show_me = 'everyone' or (me.show_me = 'women' and p.gender = 'woman') or (me.show_me = 'men' and p.gender = 'man'))
+    and (p.show_me = 'everyone' or (p.show_me = 'women' and me.gender = 'woman') or (p.show_me = 'men' and me.gender = 'man'))
+    and public.age_of(p.birthdate) >= v_min
+    and (v_max >= 70 or public.age_of(p.birthdate) <= v_max)
+    and case p_scope
+          when 'state' then p.e_country = here.country and p.e_state = here.state
+          when 'national' then p.e_country = here.country
+          else p.e_country <> here.country
+        end
+    and (p_scope <> 'state' or v_dist is null or coalesce(p.dist <= v_dist, true))
+  order by
+    (liked.direction = 'super') desc nulls last,
+    public.is_boosted(p.id) desc,
+    (liked.swiper_id is not null and (select l.priority from public.plan_limits(public.current_plan(p.id)) l)) desc nulls last,
+    case when p_scope = 'state' then p.dist end asc nulls last,
+    p.last_active_at desc
+  limit least(greatest(p_limit, 1), 50);
+end;
+$$;
+
+-- ------------------------------------------------------------ voltar perfil
+
+drop function if exists public.rewind();
+
+create function public.rewind()
+returns table (
+  id uuid, name text, age int, gender text, bio text, job text, interests text[], photos text[],
+  city text, state text, country text, verified boolean, distance_km int, super_liked_you boolean, prompts jsonb
+)
+language plpgsql
+volatile
+security definer
+set search_path = public
+as $$
+#variable_conflict use_column
+declare
+  v_me   uuid := auth.uid();
+  v_last public.swipes%rowtype;
+begin
+  if not (select l.can_rewind from public.plan_limits(public.current_plan(v_me)) l) then
+    raise exception 'Voltar perfis é um recurso do Kissly Plus' using errcode = 'P0001', hint = 'premium_required';
+  end if;
+
+  select * into v_last from public.swipes s where s.swiper_id = v_me order by s.created_at desc limit 1;
+  if not found then
+    raise exception 'Não há nenhum perfil para voltar' using errcode = 'P0002';
+  end if;
+  if v_last.direction <> 'nope' then
+    raise exception 'Só dá para voltar perfis que você passou' using errcode = 'P0001';
+  end if;
+  -- Quem foi bloqueado não volta.
+  if public.is_blocked_between(v_me, v_last.swipee_id) then
+    raise exception 'Esse perfil foi bloqueado e não pode voltar' using errcode = 'P0001';
+  end if;
+
+  delete from public.swipes s where s.swiper_id = v_me and s.swipee_id = v_last.swipee_id;
+
+  return query
+  select p.id, p.name, public.age_of(p.birthdate), p.gender, p.bio, p.job, p.interests, p.photos,
+         p.city, p.state, p.country, p.verified,
+         round(public.distance_km(me.lat, me.lng, p.lat, p.lng))::int,
+         exists (select 1 from public.swipes l where l.swiper_id = p.id and l.swipee_id = v_me and l.direction = 'super'),
+         p.prompts
+  from public.profiles p
+  cross join (select lat, lng from public.profiles where id = v_me) me
+  where p.id = v_last.swipee_id;
+end;
+$$;
+
+-- ------------------------------------------------------------ conversas
+
+drop function if exists public.get_matches();
+
+create function public.get_matches()
+returns table (
+  match_id uuid, matched_at timestamptz,
+  id uuid, name text, age int, gender text, bio text, job text, interests text[], photos text[],
+  city text, state text, country text, verified boolean,
+  last_message text, last_message_at timestamptz, last_from_me boolean, unread int, prompts jsonb
+)
+language sql
+stable
+security definer
+set search_path = public
+as $$
+  select m.id, m.created_at,
+         p.id, p.name, public.age_of(p.birthdate), p.gender, p.bio, p.job, p.interests, p.photos,
+         p.city, p.state, p.country, p.verified,
+         last.body, last.created_at, last.sender_id = auth.uid(),
+         (select count(*)::int from public.messages u
+           where u.match_id = m.id and u.sender_id <> auth.uid() and u.read_at is null),
+         p.prompts
+  from public.matches m
+  join public.profiles p
+    on p.id = case when m.user_a = auth.uid() then m.user_b else m.user_a end
+  left join lateral (
+    select msg.body, msg.created_at, msg.sender_id
+    from public.messages msg
+    where msg.match_id = m.id
+    order by msg.created_at desc
+    limit 1
+  ) last on true
+  where auth.uid() in (m.user_a, m.user_b)
+  order by coalesce(last.created_at, m.created_at) desc;
+$$;
+
+-- ------------------------------------------------------------ quem curtiu
+
+drop function if exists public.get_likes_you();
+
+create function public.get_likes_you()
+returns table (
+  id uuid, name text, age int, gender text, bio text, job text, interests text[], photos text[],
+  city text, state text, country text, verified boolean, super_like boolean, prompts jsonb
+)
+language plpgsql
+stable
+security definer
+set search_path = public
+as $$
+#variable_conflict use_column
+begin
+  if public.current_plan(auth.uid()) not in ('gold', 'platinum') then
+    raise exception 'Ver quem curtiu você é exclusivo do Kissly Gold' using errcode = 'P0001', hint = 'premium_required';
+  end if;
+
+  return query
+  select p.id, p.name, public.age_of(p.birthdate), p.gender, p.bio, p.job, p.interests, p.photos,
+         p.city, p.state, p.country, p.verified, s.direction = 'super', p.prompts
+  from public.swipes s
+  join public.profiles p on p.id = s.swiper_id
+  where s.swipee_id = auth.uid()
+    and s.direction <> 'nope'
+    and not exists (
+      select 1 from public.swipes mine where mine.swiper_id = auth.uid() and mine.swipee_id = s.swiper_id
+    )
+    and not public.is_blocked_between(auth.uid(), s.swiper_id)
+  order by s.direction = 'super' desc, s.created_at desc;
+end;
+$$;
+
+-- ---------------------------------------------------------------- permissões
+
+revoke execute on function
+  public.valid_prompts(jsonb), public.get_deck(text, int), public.rewind(), public.get_matches(), public.get_likes_you()
+from public, anon;
+grant execute on function
+  public.get_deck(text, int), public.rewind(), public.get_matches(), public.get_likes_you()
+to authenticated;
+
+-- ============================== 20261008000000_invites.sql
+-- =============================================================================
+-- Kissly · convites com recompensa
+--
+-- Cada pessoa tem um código. Quem entra com um código e completa o perfil ganha
+-- 3 dias de Gold; quem convidou ganha 7 dias de Gold a cada 3 amigos.
+-- Os prêmios ficam em reward_grants (separados das assinaturas da loja, que são
+-- reescritas pela sincronização com o RevenueCat).
+-- =============================================================================
+
+create table public.invite_codes (
+  user_id    uuid primary key references public.profiles (id) on delete cascade,
+  code       text not null unique check (code ~ '^[A-Z2-9]{6}$'),
+  created_at timestamptz not null default now()
+);
+
+create table public.referrals (
+  invitee_id uuid primary key references public.profiles (id) on delete cascade,
+  inviter_id uuid not null references public.profiles (id) on delete cascade,
+  created_at timestamptz not null default now(),
+  check (invitee_id <> inviter_id)
+);
+
+create index referrals_inviter_idx on public.referrals (inviter_id);
+
+create table public.reward_grants (
+  id         uuid primary key default gen_random_uuid(),
+  user_id    uuid not null references auth.users (id) on delete cascade,
+  plan       text not null check (plan in ('plus', 'gold', 'platinum')),
+  reason     text not null,
+  starts_at  timestamptz not null default now(),
+  expires_at timestamptz not null,
+  created_at timestamptz not null default now(),
+  check (expires_at > starts_at)
+);
+
+create index reward_grants_user_idx on public.reward_grants (user_id, expires_at);
+
+alter table public.invite_codes enable row level security;
+alter table public.referrals enable row level security;
+alter table public.reward_grants enable row level security;
+
+create policy "Ver o próprio código" on public.invite_codes
+  for select to authenticated using (user_id = (select auth.uid()));
+create policy "Ver os próprios prêmios" on public.reward_grants
+  for select to authenticated using (user_id = (select auth.uid()));
+
+revoke all on public.invite_codes, public.referrals, public.reward_grants from anon, authenticated;
+grant select on public.invite_codes, public.reward_grants to authenticated;
+
+-- ----------------------------------------------------- plano considera prêmios
+
+create or replace function public.current_plan(p_user uuid)
+returns text
+language sql
+stable
+security definer
+set search_path = public
+as $$
+  select coalesce((
+    select x.plan from (
+      select s.plan from public.subscriptions s
+      where s.user_id = p_user and (s.expires_at is null or s.expires_at > now())
+      union all
+      select g.plan from public.reward_grants g
+      where g.user_id = p_user and now() >= g.starts_at and now() < g.expires_at
+    ) x
+    order by case x.plan when 'platinum' then 3 when 'gold' then 2 when 'plus' then 1 else 0 end desc
+    limit 1
+  ), 'free');
+$$;
+
+-- O app lê o plano por aqui (a tabela subscriptions sozinha não conhece os prêmios).
+create or replace function public.my_plan()
+returns table (plan text, expires_at timestamptz)
+language sql
+stable
+security definer
+set search_path = public
+as $$
+  select public.current_plan(auth.uid()),
+         (select max(e) from (
+            select s.expires_at as e from public.subscriptions s where s.user_id = auth.uid()
+            union all
+            select g.expires_at from public.reward_grants g where g.user_id = auth.uid() and now() < g.expires_at
+          ) t);
+$$;
+
+-- ---------------------------------------------------------------- funções
+
+-- Concede dias de um plano, emendando com um prêmio igual que ainda esteja valendo.
+create or replace function public.grant_reward(p_user uuid, p_plan text, p_days int, p_reason text)
+returns void
+language plpgsql
+volatile
+security definer
+set search_path = public
+as $$
+declare
+  v_start timestamptz := greatest(
+    now(),
+    coalesce((select max(g.expires_at) from public.reward_grants g where g.user_id = p_user and g.plan = p_plan), now())
+  );
+begin
+  insert into public.reward_grants (user_id, plan, reason, starts_at, expires_at)
+  values (p_user, p_plan, p_reason, v_start, v_start + make_interval(days => p_days));
+end;
+$$;
+
+-- Devolve o código da pessoa (criando na primeira vez) e o progresso dos convites.
+create or replace function public.my_invite()
+returns table (code text, invited int, rewards_earned int, next_reward_in int)
+language plpgsql
+volatile
+security definer
+set search_path = public
+as $$
+declare
+  v_me    uuid := auth.uid();
+  v_code  text;
+  v_count int;
+  alphabet constant text := 'ABCDEFGHJKMNPQRSTUVWXYZ23456789';
+begin
+  if not exists (select 1 from public.profiles where id = v_me) then
+    raise exception 'Perfil não encontrado' using errcode = 'P0002';
+  end if;
+
+  select c.code into v_code from public.invite_codes c where c.user_id = v_me;
+  while v_code is null loop
+    v_code := (
+      select string_agg(substr(alphabet, 1 + floor(random() * length(alphabet))::int, 1), '')
+      from generate_series(1, 6)
+    );
+    begin
+      insert into public.invite_codes (user_id, code) values (v_me, v_code);
+    exception when unique_violation then
+      v_code := null; -- código já usado por outra pessoa: sorteia outro
+    end;
+  end loop;
+
+  select count(*)::int into v_count from public.referrals r where r.inviter_id = v_me;
+  return query select v_code, v_count, v_count / 3, 3 - (v_count % 3);
+end;
+$$;
+
+-- Usa um código de convite (só nos primeiros 7 dias da conta, uma única vez).
+create or replace function public.redeem_invite(p_code text)
+returns text
+language plpgsql
+volatile
+security definer
+set search_path = public
+as $$
+declare
+  v_me      uuid := auth.uid();
+  v_inviter uuid;
+  v_created timestamptz;
+  v_count   int;
+begin
+  select p.created_at into v_created from public.profiles p where p.id = v_me;
+  if v_created is null then
+    raise exception 'Complete seu perfil antes de usar um convite' using errcode = 'P0002';
+  end if;
+
+  select c.user_id into v_inviter from public.invite_codes c where c.code = upper(btrim(p_code));
+  if v_inviter is null then return 'invalid'; end if;
+  if v_inviter = v_me then return 'own'; end if;
+  if exists (select 1 from public.referrals r where r.invitee_id = v_me) then return 'already'; end if;
+  if v_created < now() - interval '7 days' then return 'expired'; end if;
+
+  insert into public.referrals (invitee_id, inviter_id) values (v_me, v_inviter);
+  perform public.grant_reward(v_me, 'gold', 3, 'convite: boas-vindas');
+
+  select count(*)::int into v_count from public.referrals r where r.inviter_id = v_inviter;
+  if v_count % 3 = 0 then
+    perform public.grant_reward(v_inviter, 'gold', 7, 'convite: 3 amigos');
+  end if;
+  return 'ok';
+end;
+$$;
+
+-- ---------------------------------------------------------------- permissões
+
+revoke execute on function
+  public.my_plan(), public.grant_reward(uuid, text, int, text), public.my_invite(), public.redeem_invite(text)
+from public, anon;
+grant execute on function public.my_plan(), public.my_invite(), public.redeem_invite(text) to authenticated;
+
+-- ============================== 20261009000000_function_privileges.sql
+-- =============================================================================
+-- Kissly · correção de segurança: quem pode executar cada função
+--
+-- O Supabase dá EXECUTE em toda função nova para os papéis anon e authenticated.
+-- As migrações anteriores tiravam a permissão só de anon, então qualquer pessoa logada
+-- conseguia chamar funções internas — por exemplo, effective_location() (cidade e
+-- coordenadas de outra pessoa), is_blocked_between() (quem bloqueou quem) e
+-- grant_reward() (dar plano pago a si mesmo).
+--
+-- Daqui em diante: tudo fechado por padrão, e liberado só o que o app chama.
+-- =============================================================================
+
+revoke execute on all functions in schema public from public, anon, authenticated;
+
+-- Funções que o app chama (supabase.rpc). Todas validam auth.uid() por dentro.
+grant execute on function
+  public.get_deck(text, int),
+  public.swipe(uuid, text),
+  public.rewind(),
+  public.my_usage(),
+  public.my_plan(),
+  public.get_matches(),
+  public.mark_read(uuid),
+  public.unmatch(uuid),
+  public.likes_you_count(),
+  public.get_likes_you(),
+  public.block_user(uuid),
+  public.boost_status(),
+  public.activate_boost(),
+  public.register_push_token(text, text),
+  public.unregister_push_token(text),
+  public.my_invite(),
+  public.redeem_invite(text),
+  public.delete_account()
+to authenticated;
+
+-- Usada pela regra (CHECK) da coluna profiles.prompts ao salvar o perfil. Só confere formato.
+grant execute on function public.valid_prompts(jsonb) to authenticated;
+
+-- Funções novas nascem fechadas; cada migração libera explicitamente o que for do app.
+alter default privileges in schema public revoke execute on functions from public, anon, authenticated;
+
+-- ============================== 20261010000000_photo_moderation.sql
+-- =============================================================================
+-- Kissly · moderação automática de fotos
+--
+-- A Edge Function moderate-photo analisa cada foto enviada (Sightengine) e apaga
+-- as que tiverem nudez explícita, violência ou símbolos de ódio. Cada recusa fica
+-- registrada aqui para a equipe revisar (ex.: banir quem insiste).
+-- =============================================================================
+
+create table public.photo_moderation (
+  id         uuid primary key default gen_random_uuid(),
+  user_id    uuid references auth.users (id) on delete set null,
+  path       text not null,
+  reasons    text[] not null,
+  scores     jsonb,
+  -- 'app': analisada no envio; 'webhook': pega pela verificação de reserva
+  source     text not null default 'app' check (source in ('app', 'webhook')),
+  created_at timestamptz not null default now()
+);
+
+create index photo_moderation_user_idx on public.photo_moderation (user_id, created_at desc);
+
+-- Só a equipe (painel do Supabase) e a Edge Function (chave de serviço) acessam.
+alter table public.photo_moderation enable row level security;
+revoke all on public.photo_moderation from anon, authenticated;

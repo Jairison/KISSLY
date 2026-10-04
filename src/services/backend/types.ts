@@ -21,6 +21,7 @@ export type BackendErrorCode =
   | 'limit_likes'
   | 'limit_super'
   | 'limit_boost'
+  | 'photo_rejected'
   | 'network'
   | 'not_available'
   | 'unknown';
@@ -30,6 +31,8 @@ export class BackendError extends Error {
   constructor(
     message: string,
     readonly code: BackendErrorCode = 'unknown',
+    /** Em photo_rejected: as fotos (URIs locais) recusadas pela moderação. */
+    readonly rejectedPhotos: string[] = [],
   ) {
     super(message);
   }

@@ -52,7 +52,8 @@
     "web": "expo start --web",
     "typecheck": "tsc --noEmit",
     "test:db": "node supabase/tests/db.test.mjs",
-    "test:plan": "node --experimental-strip-types --no-warnings --test supabase/tests/plan.test.ts"
+    "test:plan": "node --experimental-strip-types --no-warnings --test supabase/tests/plan.test.ts",
+    "test:moderation": "node --experimental-strip-types --no-warnings --test supabase/tests/moderation.test.ts"
   },
   "private": true
 }
