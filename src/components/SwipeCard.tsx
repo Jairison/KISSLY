@@ -29,11 +29,13 @@ type Props = {
   /** 0 → 1 conforme o card do topo é arrastado; usado pelo card de trás. */
   progress: SharedValue<number>;
   onSwiped: (profile: Profile, direction: SwipeDirection) => void;
+  /** Abre o menu do card (denunciar / bloquear). */
+  onMore?: (profile: Profile) => void;
 };
 
 const SPRING = { damping: 18, stiffness: 180 };
 
-export function SwipeCard({ ref, profile, isTop, progress, onSwiped }: Props) {
+export function SwipeCard({ ref, profile, isTop, progress, onSwiped, onMore }: Props) {
   const { width, height } = useWindowDimensions();
   const threshold = width * 0.28;
   const x = useSharedValue(0);
@@ -137,6 +139,12 @@ export function SwipeCard({ ref, profile, isTop, progress, onSwiped }: Props) {
           <Text style={[styles.stampText, { color: colors.sky }]}>SUPER</Text>
         </Animated.View>
 
+        {isTop && onMore && (
+          <Pressable onPress={() => onMore(profile)} hitSlop={10} style={styles.more} accessibilityLabel={`Mais opções sobre ${profile.name}`}>
+            <Ionicons name="ellipsis-horizontal" size={20} color="#fff" />
+          </Pressable>
+        )}
+
         {profile.superLikedYou && (
           <View style={styles.superBadge}>
             <Ionicons name="star" size={14} color="#fff" />
@@ -206,6 +214,18 @@ const styles = StyleSheet.create({
   stampNope: { right: 24, borderColor: colors.danger, transform: [{ rotate: '16deg' }] },
   stampSuper: { alignSelf: 'center', top: '42%', borderColor: colors.sky, transform: [{ rotate: '-8deg' }] },
   stampText: { fontFamily: fonts.bold, fontSize: 36, letterSpacing: 4 },
+  more: {
+    position: 'absolute',
+    top: 22,
+    right: 14,
+    zIndex: 4,
+    width: 36,
+    height: 36,
+    borderRadius: 18,
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: 'rgba(11,8,16,0.45)',
+  },
   superBadge: {
     position: 'absolute',
     top: 22,

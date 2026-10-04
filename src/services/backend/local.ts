@@ -346,6 +346,15 @@ export const localBackend: Backend = {
     // No modo demonstração não há moderação; a denúncia é apenas aceita.
   },
 
+  async blockUser(profileId) {
+    swiped.add(profileId);
+    const index = matches.findIndex((m) => m.profile.id === profileId);
+    if (index >= 0) {
+      messages.delete(matches[index].matchId);
+      matches.splice(index, 1);
+    }
+  },
+
   getPassport: async () => (current ? readJSON<Passport>(KEYS.passport(current.id)) : null),
 
   async setPassport(passport) {

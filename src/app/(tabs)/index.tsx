@@ -8,6 +8,7 @@ import { Ionicons } from '@expo/vector-icons';
 
 import { ActionButtons } from '@/components/ActionButtons';
 import { BoostSheet, useBoostCountdown } from '@/components/BoostSheet';
+import { ActionSheet } from '@/components/ui/ActionSheet';
 import { Logo } from '@/components/Logo';
 import { ScopeSelector } from '@/components/ScopeSelector';
 import { SwipeCard, type SwipeCardHandle } from '@/components/SwipeCard';
@@ -26,6 +27,8 @@ const openPlans = (feature: Feature) => router.push({ pathname: '/plans', params
 export default function DiscoverScreen() {
   const { plan, usage, passport, boost, addMatch, consume, refreshUsage } = useAppState();
   const [boostOpen, setBoostOpen] = useState(false);
+  // Menu "⋯" do card: denunciar ou bloquear sem precisar de match.
+  const [cardMenu, setCardMenu] = useState<{ profile: Profile; confirmBlock: boolean } | null>(null);
   const boostCountdown = useBoostCountdown(boost?.activeUntil);
   const hasPremium = isPremium(plan);
   const { show } = useToast();
@@ -78,6 +81,18 @@ export default function DiscoverScreen() {
       });
   };
 
+  const blockFromCard = async (profile: Profile) => {
+    setCardMenu(null);
+    pop();
+    try {
+      await backend.blockUser(profile.id);
+      show(`${profile.name} foi bloqueado(a)`, 'ban', colors.textMuted);
+    } catch (e) {
+      unshift(profile);
+      show(e instanceof BackendError ? e.message : 'Não foi possível bloquear', 'alert-circle', colors.danger);
+    }
+  };
+
   const rewind = async () => {
     if (!usage?.canRewind) return openPlans('rewind');
     if (rewinding) return;
@@ -122,6 +137,7 @@ export default function DiscoverScreen() {
           isTop={profile === current}
           progress={progress}
           onSwiped={handleSwiped}
+          onMore={(p) => setCardMenu({ profile: p, confirmBlock: false })}
         />
       ) : null,
     );
@@ -165,6 +181,40 @@ export default function DiscoverScreen() {
         />
       </View>
       <BoostSheet visible={boostOpen} onClose={() => setBoostOpen(false)} />
+      <ActionSheet
+        visible={!!cardMenu}
+        onClose={() => setCardMenu(null)}
+        title={cardMenu?.confirmBlock ? `Bloquear ${cardMenu.profile.name}?` : undefined}
+        message={
+          cardMenu?.confirmBlock
+            ? `Vocês não vão mais se ver no Kissly. ${cardMenu.profile.name} não é avisado(a).`
+            : undefined
+        }
+        actions={
+          !cardMenu
+            ? []
+            : cardMenu.confirmBlock
+              ? [{ label: 'Sim, bloquear', icon: 'ban', destructive: true, onPress: () => blockFromCard(cardMenu.profile) }]
+              : [
+                  {
+                    label: `Bloquear ${cardMenu.profile.name}`,
+                    icon: 'ban-outline',
+                    onPress: () => setCardMenu({ ...cardMenu, confirmBlock: true }),
+                  },
+                  {
+                    label: `Denunciar ${cardMenu.profile.name}`,
+                    icon: 'flag-outline',
+                    destructive: true,
+                    onPress: () => {
+                      const { id, name } = cardMenu.profile;
+                      setCardMenu(null);
+                      pop();
+                      router.push({ pathname: '/report-profile', params: { id, name } });
+                    },
+                  },
+                ]
+        }
+      />
     </SafeAreaView>
   );
 }

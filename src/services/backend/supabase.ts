@@ -542,6 +542,11 @@ export const supabaseBackend: Backend = {
     if (error) fail(error);
   },
 
+  async blockUser(profileId) {
+    const { error } = await db().rpc('block_user', { p_target: profileId });
+    if (error) fail(error);
+  },
+
   // ------------------------------------------------- passaporte e boost
 
   async getPassport() {

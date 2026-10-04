@@ -84,6 +84,8 @@ export interface Backend {
   subscribeInbox(onChange: (event: { type: 'message' | 'match'; matchId: string; fromMe: boolean }) => void): () => void;
   unmatch(matchId: string): Promise<void>;
   report(profileId: string, reason: ReportReason, details: string): Promise<void>;
+  /** Bloqueia nos dois sentidos e desfaz um match que exista. A pessoa não é avisada. */
+  blockUser(profileId: string): Promise<void>;
 
   // ---- Passaporte e Boost (Gold/Platinum)
   getPassport(): Promise<Passport | null>;

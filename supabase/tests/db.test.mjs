@@ -349,5 +349,47 @@ ok(verified.rows[0].verified === true && reviewed.rows[0].reviewed_at !== null, 
 await expectError('Selfie de verificação não vai para a pasta de outra pessoa',
   () => as(U4, `insert into storage.objects (bucket_id, name) values ('verifications', '${U1}/x.jpg')`), 'row-level security');
 
+// ---------------------------------------------------------------- bloqueios
+const B1 = 'b1b1b1b1-0000-4000-8000-000000000001'; // homem, quer mulheres
+const B2 = 'b2b2b2b2-0000-4000-8000-000000000002'; // mulher, quer homens
+const B3 = 'b3b3b3b3-0000-4000-8000-000000000003'; // mulher, quer homens
+await db.exec(`insert into auth.users (id, email) values ('${B1}', 'b1@test.dev'), ('${B2}', 'b2@test.dev'), ('${B3}', 'b3@test.dev');`);
+const placeIn = `insert into public.profiles (id, name, birthdate, gender, show_me, photos, city, state, country)
+  values ($1, $2, '1994-01-01', $3, $4, array['a','b'], 'Manaus', 'AM', 'Brasil')`;
+await as(B1, placeIn, [B1, 'Bruno', 'man', 'women']);
+await as(B2, placeIn, [B2, 'Bia', 'woman', 'men']);
+await as(B3, placeIn, [B3, 'Bel', 'woman', 'men']);
+
+const deckNames = async (uid) => (await as(uid, "select name from public.get_deck('state', 50)")).rows.map((r) => r.name);
+ok((await deckNames(B1)).includes('Bia') && (await deckNames(B2)).includes('Bruno'), 'Antes do bloqueio, Bruno e Bia se veem');
+
+// Bia curte Bruno; Bruno bloqueia Bia direto do card (sem match)
+await swipeAs(B2, B1, 'like');
+await as(B1, 'select public.block_user($1)', [B2]);
+ok(!(await deckNames(B1)).includes('Bia'), 'Bloqueio: Bia some do baralho de quem bloqueou');
+ok(!(await deckNames(B2)).includes('Bruno'), 'Bloqueio vale nos dois sentidos: Bruno some do baralho da Bia');
+ok((await as(B1, 'select public.likes_you_count() n')).rows[0].n === 0, 'A curtida de quem foi bloqueado sai de "Curtidas"');
+await expectError('Bloqueado não consegue criar match curtindo de novo',
+  async () => {
+    const r = await swipeAs(B2, B1, 'super');
+    if (!r.rows[0].matched) throw new Error('sem match, como esperado');
+  },
+  'sem match');
+
+// Com match: bloquear apaga o match e a conversa
+await swipeAs(B1, B3, 'like');
+const m = await swipeAs(B3, B1, 'like');
+ok(m.rows[0].matched === true, 'Bruno e Bel dão match');
+await as(B3, 'insert into public.messages (match_id, body) values ($1, $2)', [m.rows[0].match_id, 'oi']);
+await as(B3, 'select public.block_user($1)', [B1]);
+const leftover = await db.query('select (select count(*) from public.matches where id = $1)::int m, (select count(*) from public.messages where match_id = $1)::int msg', [m.rows[0].match_id]);
+ok(leftover.rows[0].m + leftover.rows[0].msg === 0, 'Bloquear depois do match apaga o match e a conversa');
+
+await expectError('Não dá para gravar bloqueio direto na tabela',
+  () => as(B1, 'insert into public.blocks values ($1, $2)', [B1, B3]), 'permission denied');
+const seen = await as(B2, 'select count(*)::int n from public.blocks');
+ok(seen.rows[0].n === 0, 'Quem foi bloqueado não vê que foi bloqueado');
+await expectError('Não dá para bloquear a si mesmo', () => as(B1, 'select public.block_user($1)', [B1]), 'a si mesmo');
+
 console.log(failures ? `\n${failures} FALHA(S)` : '\nTODOS OS TESTES PASSARAM');
 process.exit(failures ? 1 : 0);
