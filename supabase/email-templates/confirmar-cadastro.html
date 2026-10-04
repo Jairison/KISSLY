@@ -1,0 +1,56 @@
+<!doctype html>
+<html lang="pt-BR">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <meta name="color-scheme" content="dark light" />
+    <title>Bem-vindo(a) ao Kissly!</title>
+  </head>
+  <body style="margin:0;padding:0;background:#0B0810;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,Helvetica,Arial,sans-serif;">
+    <!-- Texto de prévia (aparece ao lado do assunto na caixa de entrada) -->
+    <div style="display:none;max-height:0;overflow:hidden;opacity:0;">Falta só um toque para ativar sua conta.</div>
+    <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" style="background:#0B0810;">
+      <tr>
+        <td align="center" style="padding:32px 16px;">
+          <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" style="max-width:480px;">
+            <!-- Logo -->
+            <tr>
+              <td align="center" style="padding-bottom:24px;">
+                <table role="presentation" cellpadding="0" cellspacing="0" border="0">
+                  <tr>
+                    <td width="40" height="40" align="center" valign="middle" bgcolor="#FF3D7F"
+                        style="width:40px;height:40px;border-radius:12px;background:#FF3D7F;background-image:linear-gradient(135deg,#FF3D7F,#FF7A59);font-size:22px;line-height:40px;color:#ffffff;">&#10084;</td>
+                    <td style="padding-left:10px;font-family:Georgia,'Times New Roman',serif;font-style:italic;font-weight:bold;font-size:28px;color:#F7F2F5;">Kissly</td>
+                  </tr>
+                </table>
+              </td>
+            </tr>
+            <!-- Cartão -->
+            <tr>
+              <td style="background:#16111C;border-radius:24px;padding:32px 28px;border:1px solid #2A2232;">
+              <h1 style="margin:0 0 16px;font-family:Georgia,'Times New Roman',serif;font-size:26px;line-height:32px;color:#F7F2F5;">Bem-vindo(a) ao Kissly!</h1>
+              <p style="margin:0 0 16px;font-size:16px;line-height:24px;color:#A99FB0;">Que bom ter você aqui. Para ativar sua conta e começar a dar Kiss, confirme seu e-mail tocando no botão abaixo.</p>
+              <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" style="margin:8px 0 20px;">
+                <tr>
+                  <td align="center" bgcolor="#FF3D7F" style="border-radius:999px;background:#FF3D7F;background-image:linear-gradient(135deg,#FF3D7F,#FF7A59);">
+                    <a href="{{ .ConfirmationURL }}" target="_blank"
+                       style="display:block;padding:16px 24px;font-size:16px;font-weight:bold;color:#ffffff;text-decoration:none;border-radius:999px;">Confirmar meu e-mail</a>
+                  </td>
+                </tr>
+              </table>
+              <p style="margin:0;font-size:13px;line-height:20px;color:#6E6475;">O link vale por 24 horas. Se não foi você, é só ignorar este e-mail: nada vai mudar na sua conta.</p>
+              </td>
+            </tr>
+            <!-- Rodapé -->
+            <tr>
+              <td align="center" style="padding:24px 8px 0;font-size:12px;line-height:18px;color:#6E6475;">
+                Você recebeu este e-mail porque ele foi usado no Kissly.<br />
+                Exclusivo para maiores de 18 anos.
+              </td>
+            </tr>
+          </table>
+        </td>
+      </tr>
+    </table>
+  </body>
+</html>
