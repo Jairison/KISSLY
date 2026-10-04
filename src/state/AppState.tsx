@@ -2,6 +2,7 @@ import { createContext, useCallback, useContext, useEffect, useMemo, useRef, use
 
 import { useToast } from '@/components/Toast';
 import { backend } from '@/services/backend';
+import { REDEEM_MESSAGES, getPendingInvite, setPendingInvite } from '@/services/invites';
 import { payments } from '@/services/payments';
 import { useSession } from '@/state/Session';
 import { colors } from '@/theme';
@@ -80,6 +81,20 @@ export function AppStateProvider({ children }: { children: ReactNode }) {
     if (status !== 'ready') return;
     setUsage(await backend.loadUsage().catch(() => null));
   }, [status]);
+
+  // Código de convite guardado no cadastro (ou vindo de um link): usa assim que o perfil existe.
+  useEffect(() => {
+    if (status !== 'ready') return;
+    (async () => {
+      const code = await getPendingInvite();
+      if (!code) return;
+      const result = await backend.redeemInvite(code).catch(() => null);
+      if (!result) return; // sem internet: tenta de novo na próxima abertura
+      await setPendingInvite(null);
+      show(REDEEM_MESSAGES[result], result === 'ok' ? 'gift' : 'information-circle-outline', result === 'ok' ? colors.gold : colors.textMuted);
+      if (result === 'ok') refresh();
+    })();
+  }, [status, refresh, show]);
 
   // Compras ficam associadas à conta do Kissly (e se separam ao sair).
   useEffect(() => {

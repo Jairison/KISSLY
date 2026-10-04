@@ -10,8 +10,22 @@ import { PaymentError, type Payments, type PlanOffer } from './types';
 const key = (userId: string) => `kissly.plan.${userId}`;
 let currentUser: string | null = null;
 
+const grantKey = (userId: string) => `kissly.grant.${userId}`;
+const RANK: Record<Plan, number> = { free: 0, plus: 1, gold: 2, platinum: 3 };
+
+/** Prêmio da demonstração (ex.: Gold ganho por convite), com validade. */
+export async function grantDemoPlan(userId: string, plan: Plan, days: number) {
+  const expiresAt = Date.now() + days * 86_400_000;
+  await AsyncStorage.setItem(grantKey(userId), JSON.stringify({ plan, expiresAt }));
+}
+
+/** Plano da demonstração: o comprado ou um prêmio válido, o que for maior. */
 export async function readDemoPlan(userId: string): Promise<Plan> {
-  return ((await AsyncStorage.getItem(key(userId))) as Plan | null) ?? 'free';
+  const bought = ((await AsyncStorage.getItem(key(userId))) as Plan | null) ?? 'free';
+  const raw = await AsyncStorage.getItem(grantKey(userId));
+  const grant = raw ? (JSON.parse(raw) as { plan: Plan; expiresAt: number }) : null;
+  const granted = grant && grant.expiresAt > Date.now() ? grant.plan : 'free';
+  return RANK[granted] > RANK[bought] ? granted : bought;
 }
 
 export function referenceOffers(): PlanOffer[] {

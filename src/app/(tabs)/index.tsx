@@ -1,4 +1,4 @@
-import { useRef, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { ActivityIndicator, Pressable, StyleSheet, Text, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useSharedValue } from 'react-native-reanimated';
@@ -36,6 +36,15 @@ export default function DiscoverScreen() {
   const [scope, setScope] = useState<DiscoveryScope>('state');
   const { queue, status, error, pop, unshift, reload } = useDeck(scope, passport ? `${passport.city}-${passport.country}` : '');
   const [rewinding, setRewinding] = useState(false);
+
+  // Acabaram os perfis do estado? Amplia sozinho para o Brasil (uma vez por visita), em vez da tela vazia.
+  const autoExpanded = useRef(false);
+  useEffect(() => {
+    if (scope !== 'state' || status !== 'ready' || queue.length > 0 || autoExpanded.current) return;
+    autoExpanded.current = true;
+    setScope('national');
+    show('Você já viu todo mundo do seu estado. Mostrando o Brasil inteiro 🇧🇷', 'map-outline', colors.gold);
+  }, [scope, status, queue.length, show]);
 
   const outOfLikes = usage?.likesLeft === 0;
   const outOfSupers = usage?.supersLeft === 0;

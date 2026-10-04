@@ -36,6 +36,7 @@ export default function ProfileScreen() {
   const legal = (doc: 'terms' | 'privacy' | 'safety'): Href => ({ pathname: '/legal/[doc]', params: { doc } });
   const menu: { icon: IconName; label: string; href: Href; hint?: string; tint?: string }[] = [
     { icon: 'create-outline', label: 'Editar perfil', href: '/edit-profile' },
+    { icon: 'gift-outline', label: 'Convide amigos', href: '/invite', hint: 'Ganhe Gold', tint: colors.gold },
     {
       icon: verification === 'approved' ? 'shield-checkmark' : 'shield-checkmark-outline',
       label: 'Verificar perfil',

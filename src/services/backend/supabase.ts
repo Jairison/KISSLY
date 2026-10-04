@@ -6,6 +6,7 @@ import * as WebBrowser from 'expo-web-browser';
 import type { AuthError, PostgrestError, SupabaseClient } from '@supabase/supabase-js';
 
 import { flagFor } from '@/data/catalog';
+import { normalizeInviteCode, type RedeemResult } from '@/services/invites';
 import type { Conversation, Message } from '@/types/chat';
 import type { Passport, VerificationStatus } from '@/types/extras';
 import { supabase as client } from '@/lib/supabase';
@@ -400,15 +401,11 @@ export const supabaseBackend: Backend = {
     if (error) fail(error);
   },
 
-  async loadPlan(account) {
-    const { data, error } = await db()
-      .from('subscriptions')
-      .select('plan, expires_at')
-      .eq('user_id', account.id)
-      .maybeSingle();
+  async loadPlan() {
+    // my_plan() considera a assinatura da loja e os prêmios (ex.: Gold ganho por convite).
+    const { data, error } = await db().rpc('my_plan');
     if (error) fail(error);
-    if (!data || (data.expires_at && new Date(data.expires_at) < new Date())) return 'free';
-    return data.plan as Plan;
+    return ((data as { plan: Plan }[])[0]?.plan ?? 'free') as Plan;
   },
 
   async loadUsage(): Promise<Usage> {
@@ -609,6 +606,21 @@ export const supabaseBackend: Backend = {
       updated_at: new Date().toISOString(),
     });
     if (error) fail(error);
+  },
+
+  // ------------------------------------------------------------ convites
+
+  async getInvite() {
+    const { data, error } = await db().rpc('my_invite');
+    if (error) fail(error);
+    const row = (data as { code: string; invited: number; rewards_earned: number; next_reward_in: number }[])[0];
+    return { code: row.code, invited: row.invited, rewardsEarned: row.rewards_earned, nextRewardIn: row.next_reward_in };
+  },
+
+  async redeemInvite(code) {
+    const { data, error } = await db().rpc('redeem_invite', { p_code: normalizeInviteCode(code) });
+    if (error) fail(error);
+    return data as RedeemResult;
   },
 
   // -------------------------------------------------------- verificação

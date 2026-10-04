@@ -427,5 +427,68 @@ await swipeAs(P2, P1, 'like');
 const paulaConv = await as(P1, "select prompts from public.get_matches() where name = 'Paula'");
 ok(paulaConv.rows[0]?.prompts?.length === 2, 'O match também traz as perguntas (para o perfil completo)');
 
+// ---------------------------------------------------------------- convites
+const I0 = 'd0d0d0d0-0000-4000-8000-000000000000'; // quem convida
+const friends = [1, 2, 3, 4].map((n) => `d${n}d${n}d${n}d${n}-0000-4000-8000-00000000000${n}`);
+await db.exec(`insert into auth.users (id, email) values ${[I0, ...friends].map((id, i) => `('${id}', 'inv${i}@test.dev')`).join(', ')};`);
+const inCuritiba = `insert into public.profiles (id, name, birthdate, gender, show_me, photos, city, state, country)
+  values ($1, $2, '1994-01-01', 'woman', 'men', array['a','b'], 'Curitiba', 'PR', 'Brasil')`;
+await as(I0, inCuritiba, [I0, 'Iara']);
+for (const [i, f] of friends.entries()) await as(f, inCuritiba, [f, `Amiga${i + 1}`]);
+
+const myInvite = async (uid) => (await as(uid, 'select * from public.my_invite()')).rows[0];
+const first = await myInvite(I0);
+ok(/^[A-Z2-9]{6}$/.test(first.code) && first.invited === 0 && first.next_reward_in === 3, 'Cada pessoa ganha um código de 6 letras', JSON.stringify(first));
+ok((await myInvite(I0)).code === first.code, 'O código é sempre o mesmo para a mesma pessoa');
+
+const redeem = async (uid, code) => (await as(uid, 'select public.redeem_invite($1) r', [code])).rows[0].r;
+const planOf = async (uid) => (await as(uid, 'select * from public.my_plan()')).rows[0];
+ok((await redeem(I0, first.code)) === 'own', 'Não dá para usar o próprio código');
+ok((await redeem(friends[0], 'XXXXXX')) === 'invalid', 'Código inexistente é recusado');
+
+ok((await redeem(friends[0], first.code.toLowerCase())) === 'ok', 'Amiga usa o código (maiúsculas/minúsculas tanto faz)');
+ok((await planOf(friends[0])).plan === 'gold', 'Quem foi convidado ganha 3 dias de Gold');
+ok((await redeem(friends[0], first.code)) === 'already', 'Cada pessoa só usa um convite');
+ok((await planOf(I0)).plan === 'free', 'Com 1 amiga, quem convidou ainda não ganhou');
+
+await redeem(friends[1], first.code);
+await redeem(friends[2], first.code);
+const after3 = await myInvite(I0);
+ok(after3.invited === 3 && after3.rewards_earned === 1 && after3.next_reward_in === 3, 'Com 3 amigas, quem convidou ganha a recompensa', JSON.stringify(after3));
+const inviterPlan = await planOf(I0);
+const days = Math.round((new Date(inviterPlan.expires_at) - Date.now()) / 864e5);
+ok(inviterPlan.plan === 'gold' && days === 7, 'Recompensa = 7 dias de Gold', `${inviterPlan.plan}, ${days} dias`);
+
+await db.exec(`update public.profiles set created_at = now() - interval '8 days' where id = '${friends[3]}'`);
+ok((await redeem(friends[3], first.code)) === 'expired', 'Contas com mais de 7 dias não usam convite');
+
+await expectError('Ninguém se dá prêmio sozinho',
+  () => as(I0, "insert into public.reward_grants (user_id, plan, reason, expires_at) values ($1, 'platinum', 'x', now() + interval '1 year')", [I0]), 'permission denied');
+await expectError('Ninguém chama grant_reward direto',
+  () => as(I0, "select public.grant_reward($1, 'platinum', 365, 'x')", [I0]), 'permission denied');
+
+// Prêmio + assinatura: vale o maior; e o prêmio sobrevive à sincronização da loja (que só mexe em subscriptions)
+await db.exec(`insert into public.subscriptions values ('${I0}', 'plus', now() + interval '30 days')`);
+ok((await planOf(I0)).plan === 'gold', 'Com Plus pago e Gold de prêmio, vale o Gold');
+await db.exec(`delete from public.subscriptions where user_id = '${I0}'`);
+ok((await planOf(I0)).plan === 'gold', 'Se a assinatura da loja sumir, o prêmio continua');
+const usageGold = (await as(I0, 'select plan, supers_left from public.my_usage()')).rows[0];
+ok(usageGold.plan === 'gold' && usageGold.supers_left === 5, 'O prêmio libera os recursos do Gold no servidor', JSON.stringify(usageGold));
+
+// ------------------------------------------------- funções internas fechadas
+const F1 = friends[0];
+for (const [label, sql] of [
+  ['localização de outra pessoa (effective_location)', `select * from public.effective_location('${I0}')`],
+  ['quem bloqueou quem (is_blocked_between)', `select public.is_blocked_between('${B1}', '${B2}')`],
+  ['plano de outra pessoa (current_plan)', `select public.current_plan('${I0}')`],
+  ['dar prêmio a si mesmo (grant_reward)', `select public.grant_reward('${I0}', 'platinum', 365, 'x')`],
+  ['limites internos (plan_limits)', `select * from public.plan_limits('gold')`],
+  ['boost de outra pessoa (is_boosted)', `select public.is_boosted('${U5}')`],
+]) {
+  await expectError(`Usuário logado não chama ${label}`, () => as(F1, sql), 'permission denied');
+}
+const stillWorks = await as(F1, "select count(*)::int n from public.get_deck('national', 50)");
+ok(stillWorks.rows[0].n >= 0, 'As funções do app continuam liberadas para quem está logado');
+
 console.log(failures ? `\n${failures} FALHA(S)` : '\nTODOS OS TESTES PASSARAM');
 process.exit(failures ? 1 : 0);

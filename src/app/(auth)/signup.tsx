@@ -1,4 +1,4 @@
-import { useRef, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { KeyboardAvoidingView, Platform, Pressable, ScrollView, StyleSheet, Text, TextInput, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { router } from 'expo-router';
@@ -8,6 +8,13 @@ import { Button } from '@/components/ui/Button';
 import { ScreenHeader } from '@/components/ui/ScreenHeader';
 import { TextField } from '@/components/ui/TextField';
 import { BackendError, PASSWORD_MIN, isValidEmail } from '@/services/backend';
+import {
+  INVITE_REWARD,
+  getPendingInvite,
+  isInviteCodeShape,
+  normalizeInviteCode,
+  setPendingInvite,
+} from '@/services/invites';
 import { useSession } from '@/state/Session';
 import { colors, fonts, radii, spacing } from '@/theme';
 
@@ -32,19 +39,34 @@ export default function SignupScreen() {
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
   const [confirmSent, setConfirmSent] = useState(false);
+  const [invite, setInvite] = useState('');
+  const [showInvite, setShowInvite] = useState(false);
+
+  // Se a pessoa chegou por um link de convite, o código já vem preenchido.
+  useEffect(() => {
+    getPendingInvite().then((code) => {
+      if (code) {
+        setInvite(code);
+        setShowInvite(true);
+      }
+    });
+  }, []);
+  const inviteError = invite && !isInviteCodeShape(invite) ? 'O código tem 6 letras/números' : null;
   const passwordRef = useRef<TextInput>(null);
   const confirmRef = useRef<TextInput>(null);
 
   const emailError = touched && email && !isValidEmail(email) ? 'E-mail inválido' : null;
   const confirmError = confirm && confirm !== password ? 'As senhas não coincidem' : null;
   const strength = passwordStrength(password);
-  const valid = isValidEmail(email) && password.length >= PASSWORD_MIN && confirm === password && accepted;
+  const valid =
+    isValidEmail(email) && password.length >= PASSWORD_MIN && confirm === password && accepted && !inviteError;
 
   const submit = async () => {
     setError(null);
     setLoading(true);
     try {
       // Ao criar a conta, a sessão vai para "onboarding" e o app abre o cadastro do perfil.
+      await setPendingInvite(invite || null);
       const result = await signUp(email, password);
       if (result.status === 'confirmEmail') setConfirmSent(true);
     } catch (e) {
@@ -131,6 +153,25 @@ export default function SignupScreen() {
               error={confirmError}
             />
 
+            {showInvite ? (
+              <TextField
+                label="Código de convite (opcional)"
+                icon="gift-outline"
+                placeholder="Ex.: K7M2QP"
+                value={invite}
+                onChangeText={(t) => setInvite(normalizeInviteCode(t).slice(0, 6))}
+                autoCapitalize="characters"
+                autoCorrect={false}
+                error={inviteError}
+                hint={`Você ganha ${INVITE_REWARD.inviteeDays} dias de Kissly Gold ao completar o perfil`}
+              />
+            ) : (
+              <Pressable onPress={() => setShowInvite(true)} style={styles.inviteLink}>
+                <Ionicons name="gift-outline" size={16} color={colors.gold} />
+                <Text style={styles.inviteLinkText}>Tenho um código de convite</Text>
+              </Pressable>
+            )}
+
             <Pressable onPress={() => setAccepted((a) => !a)} style={styles.terms}>
               <View style={[styles.checkbox, accepted && styles.checkboxOn]}>
                 {accepted && <Ionicons name="checkmark" size={16} color="#fff" />}
@@ -165,6 +206,8 @@ const styles = StyleSheet.create({
   strength: { flexDirection: 'row', alignItems: 'center', gap: 6, marginTop: -spacing.sm, marginBottom: spacing.sm, paddingHorizontal: 4 },
   strengthBar: { flex: 1, height: 4, borderRadius: 2 },
   strengthText: { fontFamily: fonts.semibold, fontSize: 12, marginLeft: 6, minWidth: 40 },
+  inviteLink: { flexDirection: 'row', alignItems: 'center', gap: 6, alignSelf: 'flex-start', paddingVertical: spacing.sm },
+  inviteLinkText: { fontFamily: fonts.semibold, fontSize: 14, color: colors.gold },
   terms: { flexDirection: 'row', gap: spacing.md, alignItems: 'flex-start', marginTop: spacing.sm },
   checkbox: {
     width: 24,

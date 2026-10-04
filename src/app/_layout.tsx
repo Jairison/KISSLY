@@ -14,11 +14,14 @@ import { Inter_400Regular, Inter_500Medium, Inter_600SemiBold, Inter_700Bold } f
 import { PushBridge } from '@/components/PushBridge';
 import { ToastProvider } from '@/components/Toast';
 import { Button } from '@/components/ui/Button';
+import { captureInviteFromUrl } from '@/services/invites';
 import { AppStateProvider } from '@/state/AppState';
 import { SessionProvider, useSession } from '@/state/Session';
 import { colors, fonts, spacing } from '@/theme';
 
 SplashScreen.preventAutoHideAsync();
+// Link de convite (…/?convite=ABC123): guarda o código para usar após o cadastro.
+captureInviteFromUrl();
 
 const theme = {
   ...DarkTheme,
@@ -84,6 +87,7 @@ function RootNavigator() {
           <Stack.Screen name="person/[matchId]" options={{ presentation: 'modal' }} />
           <Stack.Screen name="report/[matchId]" options={{ presentation: 'modal' }} />
           <Stack.Screen name="report-profile" options={{ presentation: 'modal' }} />
+          <Stack.Screen name="invite" options={{ animation: 'slide_from_right' }} />
           <Stack.Screen name="plans" options={{ presentation: 'modal' }} />
           <Stack.Screen name="passport" options={{ presentation: 'modal' }} />
           <Stack.Screen name="notifications" options={{ animation: 'slide_from_right' }} />

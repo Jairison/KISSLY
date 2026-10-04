@@ -6,7 +6,8 @@ import * as Crypto from 'expo-crypto';
 
 import { LIMITS } from '@/data/plans';
 import { buildDeck, profiles as demoProfiles } from '@/data/profiles';
-import { readDemoPlan } from '@/services/payments/demo';
+import { grantDemoPlan, readDemoPlan } from '@/services/payments/demo';
+import { INVITE_REWARD, isInviteCodeShape, normalizeInviteCode } from '@/services/invites';
 import type { ChatEvents, Conversation, Message } from '@/types/chat';
 import { BOOST_MINUTES, type NotificationSettings, type Passport, type VerificationStatus } from '@/types/extras';
 import { DEFAULT_PREFS, isPremium, type DiscoveryPrefs, type Plan, type Profile, type UserProfile } from '@/types/user';
@@ -126,6 +127,20 @@ async function loadOwn() {
   ]);
   if (!profile) throw new BackendError('Perfil não encontrado', 'unknown');
   return { profile, prefs: prefs ?? DEFAULT_PREFS };
+}
+
+/** Código de convite da demonstração: 6 letras derivadas do id da conta. */
+function demoInviteCode(id: string) {
+  const alphabet = 'ABCDEFGHJKMNPQRSTUVWXYZ23456789';
+  let hash = 0;
+  for (const ch of id) hash = (hash * 31 + ch.charCodeAt(0)) >>> 0;
+  let code = '';
+  for (let i = 0; i < 6; i++) {
+    code += alphabet[hash % alphabet.length];
+    hash = Math.floor(hash / alphabet.length) + (i + 7) * 2654435761;
+    hash >>>= 0;
+  }
+  return code;
 }
 
 const notAvailable = (what: string) =>
@@ -396,6 +411,22 @@ export const localBackend: Backend = {
 
   async saveNotificationSettings(settings) {
     await writeJSON(KEYS.notifications(requireAccount().id), settings);
+  },
+
+  async getInvite() {
+    return { code: demoInviteCode(requireAccount().id), invited: 0, rewardsEarned: 0, nextRewardIn: INVITE_REWARD.friendsPerReward };
+  },
+
+  async redeemInvite(code) {
+    const account = requireAccount();
+    const normalized = normalizeInviteCode(code);
+    if (!isInviteCodeShape(normalized)) return 'invalid';
+    if (normalized === demoInviteCode(account.id)) return 'own';
+    const usedKey = `kissly.inviteUsed.${account.id}`;
+    if (await AsyncStorage.getItem(usedKey)) return 'already';
+    await AsyncStorage.setItem(usedKey, normalized);
+    await grantDemoPlan(account.id, 'gold', INVITE_REWARD.inviteeDays);
+    return 'ok';
   },
 
   verificationStatus: async () =>

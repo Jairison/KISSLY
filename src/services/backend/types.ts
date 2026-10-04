@@ -1,5 +1,6 @@
 import type { ChatChannel, ChatEvents, Conversation, Message, ReportReason } from '@/types/chat';
 import type { BoostStatus, NotificationSettings, Passport, VerificationStatus } from '@/types/extras';
+import type { InviteInfo, RedeemResult } from '@/services/invites';
 import type { DiscoveryPrefs, DiscoveryScope, Plan, Profile, Usage, UserProfile } from '@/types/user';
 
 export type Account = { id: string; email: string };
@@ -100,6 +101,12 @@ export interface Backend {
   unregisterPushToken(token: string): Promise<void>;
   loadNotificationSettings(): Promise<NotificationSettings>;
   saveNotificationSettings(settings: NotificationSettings): Promise<void>;
+
+  // ---- convites
+  /** Código da pessoa (criado na primeira vez) e o progresso das recompensas. */
+  getInvite(): Promise<InviteInfo>;
+  /** Usa um código de convite (uma vez, nos primeiros 7 dias da conta). */
+  redeemInvite(code: string): Promise<RedeemResult>;
 
   // ---- verificação de perfil
   verificationStatus(): Promise<VerificationStatus>;
