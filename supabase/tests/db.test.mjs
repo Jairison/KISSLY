@@ -153,6 +153,10 @@ await expectError('Não pode enviar foto na pasta de outra pessoa',
   () => as(U1, `insert into storage.objects (bucket_id, name) values ('photos', '${U2}/x.jpg')`), 'row-level security');
 await as(U1, `insert into storage.objects (bucket_id, name) values ('photos', '${U1}/x.jpg')`);
 ok(true, 'Pode enviar foto na própria pasta');
+const ownPhotos = await as(U1, "select name from storage.objects where bucket_id = 'photos'");
+ok(ownPhotos.rows.length === 1, 'Lista as próprias fotos (necessário para conseguir apagá-las)', ownPhotos.rows.length);
+const othersPhotos = await as(U2, "select name from storage.objects where bucket_id = 'photos'");
+ok(othersPhotos.rows.length === 0, 'Não lista as fotos de outras pessoas', othersPhotos.rows.length);
 
 // ------------------------------------------------------------------ chat
 const U3 = '33333333-3333-4333-8333-333333333333'; // intruso, fora do match
