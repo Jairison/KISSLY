@@ -391,5 +391,41 @@ const seen = await as(B2, 'select count(*)::int n from public.blocks');
 ok(seen.rows[0].n === 0, 'Quem foi bloqueado não vê que foi bloqueado');
 await expectError('Não dá para bloquear a si mesmo', () => as(B1, 'select public.block_user($1)', [B1]), 'a si mesmo');
 
+// ---------------------------------------------------------------- perguntas do perfil
+const P1 = 'c1c1c1c1-0000-4000-8000-000000000001';
+const P2 = 'c2c2c2c2-0000-4000-8000-000000000002';
+await db.exec(`insert into auth.users (id, email) values ('${P1}', 'p1@test.dev'), ('${P2}', 'p2@test.dev');`);
+const inRecife = `insert into public.profiles (id, name, birthdate, gender, show_me, photos, city, state, country)
+  values ($1, $2, '1994-01-01', $3, $4, array['a','b'], 'Recife', 'PE', 'Brasil')`;
+await as(P1, inRecife, [P1, 'Paulo', 'man', 'women']);
+await as(P2, inRecife, [P2, 'Paula', 'woman', 'men']);
+
+const good = JSON.stringify([
+  { question: 'Meu domingo ideal é…', answer: 'Praia cedo e um almoço demorado.' },
+  { question: 'Vou te conquistar se…', answer: 'Me levar para comer tapioca.' },
+]);
+await as(P2, 'update public.profiles set prompts = $1::jsonb where id = $2', [good, P2]);
+ok(true, 'Salva até 3 perguntas no próprio perfil');
+
+const tooMany = JSON.stringify(Array.from({ length: 4 }, (_, i) => ({ question: `Pergunta ${i}`, answer: 'x' })));
+await expectError('Mais de 3 perguntas é recusado',
+  () => as(P2, 'update public.profiles set prompts = $1::jsonb where id = $2', [tooMany, P2]), 'check constraint');
+await expectError('Resposta longa demais (mais de 150 letras) é recusada',
+  () => as(P2, 'update public.profiles set prompts = $1::jsonb where id = $2',
+    [JSON.stringify([{ question: 'Meu domingo ideal é…', answer: 'a'.repeat(151) }]), P2]), 'check constraint');
+await expectError('Resposta vazia é recusada',
+  () => as(P2, 'update public.profiles set prompts = $1::jsonb where id = $2',
+    [JSON.stringify([{ question: 'Meu domingo ideal é…', answer: '   ' }]), P2]), 'check constraint');
+await expectError('Formato inválido é recusado',
+  () => as(P2, 'update public.profiles set prompts = $1::jsonb where id = $2', ['{"oi":1}', P2]), 'check constraint');
+
+const card = await as(P1, "select name, prompts from public.get_deck('state', 50) where name = 'Paula'");
+ok(card.rows[0]?.prompts?.[0]?.answer === 'Praia cedo e um almoço demorado.', 'O baralho traz as perguntas no card', JSON.stringify(card.rows[0]?.prompts));
+
+await swipeAs(P1, P2, 'like');
+await swipeAs(P2, P1, 'like');
+const paulaConv = await as(P1, "select prompts from public.get_matches() where name = 'Paula'");
+ok(paulaConv.rows[0]?.prompts?.length === 2, 'O match também traz as perguntas (para o perfil completo)');
+
 console.log(failures ? `\n${failures} FALHA(S)` : '\nTODOS OS TESTES PASSARAM');
 process.exit(failures ? 1 : 0);

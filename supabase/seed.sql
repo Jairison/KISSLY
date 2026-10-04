@@ -79,6 +79,14 @@ insert into public.demo_like_back (user_id)
 select uid from ids where likes_back and uid in (select id from new_profiles)
 on conflict do nothing;
 
+-- Perguntas do perfil em alguns perfis de demonstração
+update public.profiles set prompts = '[{"question":"Meu domingo ideal é…","answer":"Feira de antiguidades de manhã e um vinho no fim da tarde."},{"question":"Vou te conquistar se…","answer":"Souber o nome do arquiteto daquele prédio bonito."}]'::jsonb where id = '00000000-0000-4000-8000-000000000001';
+update public.profiles set prompts = '[{"question":"O primeiro encontro perfeito seria…","answer":"Exposição no MASP e depois um brunch sem pressa."},{"question":"Meu green flag favorito é…","answer":"Gente que pergunta \"chegou bem?\"."}]'::jsonb where id = '00000000-0000-4000-8000-000000000013';
+update public.profiles set prompts = '[{"question":"Não vivo sem…","answer":"Meu cachorro, o Bento, e o mar de Santos."}]'::jsonb where id = '00000000-0000-4000-8000-000000000009';
+update public.profiles set prompts = '[{"question":"Meu lugar favorito na cidade é…","answer":"O miradouro da Graça ao pôr do sol."}]'::jsonb where id = '00000000-0000-4000-8000-000000000003';
+update public.profiles set prompts = '[{"question":"A música que define meu momento é…","answer":"Qualquer coisa do BaianaSystem no último volume."},{"question":"Estou procurando alguém que…","answer":"Dance comigo mesmo sem saber dançar."}]'::jsonb where id = '00000000-0000-4000-8000-000000000007';
+update public.profiles set prompts = '[{"question":"Uma viagem inesquecível foi…","answer":"O Réveillon em Copacabana! Quero voltar."}]'::jsonb where id = '00000000-0000-4000-8000-000000000014';
+
 -- ---------------------------------------------------------------- LIMPEZA
 -- delete from auth.users where email like 'demo%@kissly.dev';
 -- drop trigger if exists swipes_demo_like_back on public.swipes;

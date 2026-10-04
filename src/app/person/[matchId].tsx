@@ -78,6 +78,13 @@ export default function PersonScreen() {
             </View>
           ) : null}
 
+          {profile.prompts?.map((p) => (
+            <View key={p.question} style={styles.card}>
+              <Text style={styles.cardTitle}>{p.question}</Text>
+              <Text style={styles.promptAnswer}>{p.answer}</Text>
+            </View>
+          ))}
+
           <View style={styles.card}>
             <Text style={styles.cardTitle}>Interesses</Text>
             <View style={styles.tags}>
@@ -149,6 +156,7 @@ const styles = StyleSheet.create({
     color: colors.rose,
   },
   bio: { fontFamily: fonts.regular, fontSize: 16, lineHeight: 24, color: colors.text },
+  promptAnswer: { fontFamily: fonts.display, fontSize: 22, lineHeight: 30, color: colors.text },
   tags: { flexDirection: 'row', flexWrap: 'wrap', gap: spacing.sm },
   tag: {
     paddingHorizontal: 14,

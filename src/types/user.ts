@@ -4,6 +4,9 @@ export type Plan = 'free' | 'plus' | 'gold' | 'platinum';
 export type DiscoveryScope = 'state' | 'national' | 'international';
 export type SwipeDirection = 'left' | 'right' | 'up';
 
+/** Pergunta respondida no perfil ("Meu domingo ideal é…"). */
+export type ProfilePrompt = { question: string; answer: string };
+
 /** O perfil de quem está usando o app. */
 export type UserProfile = {
   id: string;
@@ -17,6 +20,8 @@ export type UserProfile = {
   bio: string;
   job: string;
   interests: string[];
+  /** Até 3 perguntas respondidas (opcional). */
+  prompts: ProfilePrompt[];
   city: string;
   state: string;
   country: string;
@@ -35,6 +40,7 @@ export type Profile = {
   job?: string;
   bio: string;
   interests: string[];
+  prompts?: ProfilePrompt[];
   city: string;
   state: string;
   country: string;
@@ -92,6 +98,7 @@ export function profileCompletion(p: UserProfile): number {
     p.bio.trim().length >= 30,
     p.job.trim().length > 0,
     p.interests.length >= INTEREST_LIMITS.min,
+    (p.prompts?.length ?? 0) > 0,
     p.city.trim().length > 0,
   ];
   return checks.filter(Boolean).length / checks.length;

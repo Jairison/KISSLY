@@ -15,6 +15,7 @@ import {
   type Gender,
   type Plan,
   type Profile,
+  type ProfilePrompt,
   type ShowMe,
   type Usage,
   type UserProfile,
@@ -82,6 +83,7 @@ type ProfileRow = {
   job: string;
   interests: string[];
   photos: string[];
+  prompts: ProfilePrompt[] | null;
   city: string;
   state: string;
   country: string;
@@ -104,6 +106,7 @@ type CardRow = {
   verified: boolean;
   distance_km?: number | null;
   super_liked_you?: boolean;
+  prompts?: ProfilePrompt[] | null;
 };
 
 const toUser = (row: ProfileRow, email: string): UserProfile => ({
@@ -117,6 +120,7 @@ const toUser = (row: ProfileRow, email: string): UserProfile => ({
   job: row.job,
   interests: row.interests,
   photos: row.photos,
+  prompts: row.prompts ?? [],
   city: row.city,
   state: row.state,
   country: row.country,
@@ -140,6 +144,7 @@ const toCard = (row: CardRow): Profile => ({
   verified: row.verified,
   distanceKm: row.distance_km ?? null,
   superLikedYou: Boolean(row.super_liked_you),
+  prompts: row.prompts ?? [],
 });
 
 type MessageRow = {
@@ -188,6 +193,7 @@ function toRow(draft: Partial<ProfileDraft>) {
   if (draft.bio !== undefined) row.bio = draft.bio;
   if (draft.job !== undefined) row.job = draft.job;
   if (draft.interests !== undefined) row.interests = draft.interests;
+  if (draft.prompts !== undefined) row.prompts = draft.prompts;
   if (draft.photos !== undefined) row.photos = draft.photos;
   if (draft.city !== undefined) row.city = draft.city;
   if (draft.state !== undefined) row.state = draft.state;

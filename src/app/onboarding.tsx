@@ -10,6 +10,7 @@ import { BirthdateInput, checkBirthdate } from '@/components/profile/BirthdateIn
 import { DiscoveryFilters } from '@/components/profile/DiscoveryFilters';
 import { LocationPicker } from '@/components/profile/LocationPicker';
 import { PhotoGrid } from '@/components/profile/PhotoGrid';
+import { PromptEditor, cleanPrompts } from '@/components/profile/PromptEditor';
 import { useToast } from '@/components/Toast';
 import { Button } from '@/components/ui/Button';
 import { ChoiceList, MultiChips } from '@/components/ui/ChipGroup';
@@ -25,6 +26,7 @@ import {
   ageFromBirthdate,
   type DiscoveryPrefs,
   type Gender,
+  type ProfilePrompt,
   type ShowMe,
 } from '@/types/user';
 
@@ -37,6 +39,7 @@ type Draft = {
   bio: string;
   job: string;
   interests: string[];
+  prompts: ProfilePrompt[];
   city: string;
   state: string;
   country: string;
@@ -61,6 +64,7 @@ export default function OnboardingScreen() {
     bio: '',
     job: '',
     interests: [],
+    prompts: [],
     city: '',
     state: '',
     country: 'Brasil',
@@ -140,6 +144,12 @@ export default function OnboardingScreen() {
       ),
     },
     {
+      title: 'Mostre sua personalidade',
+      subtitle: 'Escolha até 3 perguntas e responda do seu jeito. É opcional, mas perfis com respostas puxam muito mais conversa.',
+      valid: true,
+      content: <PromptEditor prompts={draft.prompts} onChange={(p) => set('prompts', p)} />,
+    },
+    {
       title: 'O que você curte?',
       subtitle: `Escolha de ${INTEREST_LIMITS.min} a ${INTEREST_LIMITS.max} interesses · ${draft.interests.length} selecionados`,
       valid: draft.interests.length >= INTEREST_LIMITS.min,
@@ -203,6 +213,7 @@ export default function OnboardingScreen() {
           bio: draft.bio.trim(),
           job: draft.job.trim(),
           interests: draft.interests,
+          prompts: cleanPrompts(draft.prompts),
           city: draft.city.trim(),
           state: draft.state,
           country: draft.country,

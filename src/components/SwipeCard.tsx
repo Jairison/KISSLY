@@ -174,7 +174,18 @@ export function SwipeCard({ ref, profile, isTop, progress, onSwiped, onMore }: P
                 {profile.distanceKm !== null ? ` · ${formatDistance(profile.distanceKm)}` : ''}
               </Text>
             </View>
-            <Text style={styles.bio} numberOfLines={2}>{profile.bio}</Text>
+            {profile.prompts?.length ? (
+              <View style={styles.prompt}>
+                <Text style={styles.promptQuestion}>{profile.prompts[0].question}</Text>
+                <Text style={styles.promptAnswer} numberOfLines={2}>
+                  {profile.prompts[0].answer}
+                </Text>
+              </View>
+            ) : (
+              <Text style={styles.bio} numberOfLines={2}>
+                {profile.bio}
+              </Text>
+            )}
             <View style={styles.tags}>
               {profile.interests.map((tag) => (
                 <View key={tag} style={styles.tag}>
@@ -248,6 +259,17 @@ const styles = StyleSheet.create({
   metaRow: { flexDirection: 'row', alignItems: 'center', gap: 6 },
   meta: { fontFamily: fonts.medium, fontSize: 14, color: colors.textMuted },
   bio: { fontFamily: fonts.regular, fontSize: 15, lineHeight: 21, color: colors.text, opacity: 0.9, marginTop: 4 },
+  prompt: {
+    marginTop: 6,
+    paddingHorizontal: 14,
+    paddingVertical: 10,
+    borderRadius: radii.md,
+    backgroundColor: 'rgba(255,255,255,0.1)',
+    borderLeftWidth: 3,
+    borderLeftColor: colors.rose,
+  },
+  promptQuestion: { fontFamily: fonts.semibold, fontSize: 12, color: colors.rose, marginBottom: 2 },
+  promptAnswer: { fontFamily: fonts.medium, fontSize: 15, lineHeight: 20, color: colors.text },
   tags: { flexDirection: 'row', flexWrap: 'wrap', gap: 6, marginTop: 6 },
   tag: {
     paddingHorizontal: 12,

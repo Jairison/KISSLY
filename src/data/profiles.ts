@@ -7,6 +7,7 @@ const photo = (img: number) => `https://i.pravatar.cc/800?img=${img}`;
 export const profiles: Profile[] = [
   {
     id: 'p1', name: 'Isabela', age: 26, gender: 'woman', photos: [photo(26)], job: 'Arquiteta',
+    prompts: [{ question: "Meu domingo ideal é…", answer: "Feira de antiguidades de manhã e um vinho no fim da tarde." }, { question: "Vou te conquistar se…", answer: "Souber o nome do arquiteto daquele prédio bonito." }],
     bio: 'Café coado, museus vazios e viagens sem roteiro. Me leva pra conhecer seu restaurante favorito?',
     interests: ['Arquitetura', 'Vinho', 'Viagens'],
     city: 'Campinas', state: 'SP', country: 'Brasil', flag: '🇧🇷', distanceKm: 94, verified: true, likesYou: true,
@@ -19,6 +20,7 @@ export const profiles: Profile[] = [
   },
   {
     id: 'p3', name: 'Sofia', age: 30, gender: 'woman', photos: [photo(36)], job: 'Designer de moda',
+    prompts: [{ question: "Meu lugar favorito na cidade é…", answer: "O miradouro da Graça ao pôr do sol." }],
     bio: 'Lisboeta de coração. Se vier a Portugal, os pastéis de nata são por minha conta.',
     interests: ['Moda', 'Fado', 'Gastronomia'],
     city: 'Lisboa', state: 'Lisboa', country: 'Portugal', flag: '🇵🇹', distanceKm: 7930, verified: true, likesYou: true,
@@ -43,6 +45,7 @@ export const profiles: Profile[] = [
   },
   {
     id: 'p7', name: 'Luana', age: 25, gender: 'woman', photos: [photo(16)], job: 'Produtora musical',
+    prompts: [{ question: "A música que define meu momento é…", answer: "Qualquer coisa do BaianaSystem no último volume." }, { question: "Estou procurando alguém que…", answer: "Dance comigo mesmo sem saber dançar." }],
     bio: 'Salvador, axé e beats. Se você tiver uma playlist boa, já ganhou pontos.',
     interests: ['Música', 'Carnaval', 'Dança'],
     city: 'Salvador', state: 'BA', country: 'Brasil', flag: '🇧🇷', distanceKm: 1450, verified: true, likesYou: true,
@@ -55,6 +58,7 @@ export const profiles: Profile[] = [
   },
   {
     id: 'p9', name: 'Valentina', age: 24, gender: 'woman', photos: [photo(47)], job: 'Advogada',
+    prompts: [{ question: "Não vivo sem…", answer: "Meu cachorro, o Bento, e o mar de Santos." }],
     bio: 'Litoral, livros e cachorros. Sinceridade acima de tudo.',
     interests: ['Pets', 'Leitura', 'Surf'],
     city: 'Santos', state: 'SP', country: 'Brasil', flag: '🇧🇷', distanceKm: 72, verified: true, likesYou: false,
@@ -79,12 +83,14 @@ export const profiles: Profile[] = [
   },
   {
     id: 'p13', name: 'Mariana', age: 27, gender: 'woman', photos: [photo(5)], job: 'Psicóloga',
+    prompts: [{ question: "O primeiro encontro perfeito seria…", answer: "Exposição no MASP e depois um brunch sem pressa." }, { question: "Meu green flag favorito é…", answer: "Gente que pergunta \"chegou bem?\"." }],
     bio: 'Paulistana, adoro brunch e exposições. Procuro algo leve que pode virar sério.',
     interests: ['Arte', 'Brunch', 'Pilates'],
     city: 'São Paulo', state: 'SP', country: 'Brasil', flag: '🇧🇷', distanceKm: 6, verified: true, likesYou: false,
   },
   {
     id: 'p14', name: 'Amara', age: 26, gender: 'woman', photos: [photo(49)], job: 'Personal trainer',
+    prompts: [{ question: "Uma viagem inesquecível foi…", answer: "O Réveillon em Copacabana! Quero voltar." }],
     bio: 'Miami sun, good vibes. Amo o Brasil, já fui ao Rio 3 vezes!',
     interests: ['Fitness', 'Praia', 'Viagens'],
     city: 'Miami', state: 'FL', country: 'EUA', flag: '🇺🇸', distanceKm: 6550, verified: true, likesYou: true,

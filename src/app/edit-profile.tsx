@@ -5,6 +5,8 @@ import { router } from 'expo-router';
 
 import { LocationPicker } from '@/components/profile/LocationPicker';
 import { PhotoGrid } from '@/components/profile/PhotoGrid';
+import { PromptEditor, cleanPrompts } from '@/components/profile/PromptEditor';
+import { PROMPT_LIMITS } from '@/data/prompts';
 import { useToast } from '@/components/Toast';
 import { Button } from '@/components/ui/Button';
 import { ChoiceList, MultiChips } from '@/components/ui/ChipGroup';
@@ -19,7 +21,7 @@ export default function EditProfileScreen() {
   const user = useCurrentUser();
   const { updateProfile } = useSession();
   const { show } = useToast();
-  const [form, setForm] = useState(user);
+  const [form, setForm] = useState({ ...user, prompts: user.prompts ?? [] });
   const [saving, setSaving] = useState(false);
   const set = <K extends keyof typeof form>(key: K, value: (typeof form)[K]) => setForm((f) => ({ ...f, [key]: value }));
 
@@ -37,7 +39,13 @@ export default function EditProfileScreen() {
     setSaving(true);
     try {
       const { id: _id, email: _email, ...changes } = form;
-      await updateProfile({ ...changes, bio: changes.bio.trim(), job: changes.job.trim(), city: changes.city.trim() });
+      await updateProfile({
+        ...changes,
+        bio: changes.bio.trim(),
+        job: changes.job.trim(),
+        city: changes.city.trim(),
+        prompts: cleanPrompts(changes.prompts),
+      });
       show('Perfil atualizado', 'checkmark-circle', colors.mint);
       router.back();
     } catch {
@@ -71,6 +79,10 @@ export default function EditProfileScreen() {
               onChangeText={(t) => set('job', t)}
               maxLength={40}
             />
+          </Section>
+
+          <Section title={`Perguntas · ${form.prompts.length}/${PROMPT_LIMITS.max}`}>
+            <PromptEditor prompts={form.prompts} onChange={(p) => set('prompts', p)} />
           </Section>
 
           <Section title={`Interesses · ${form.interests.length}/${INTEREST_LIMITS.max}`}>
