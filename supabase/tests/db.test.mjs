@@ -508,5 +508,44 @@ for (const [label, sql] of [
 const stillWorks = await as(F1, "select count(*)::int n from public.get_deck('national', 50)");
 ok(stillWorks.rows[0].n >= 0, 'As funções do app continuam liberadas para quem está logado');
 
+// ---------------------------------------------------------------- fotos, áudios e GIFs
+// Paulo (P1) e Paula (P2) deram match no teste das perguntas; B3 é de fora.
+const MM = (await as(P1, "select match_id from public.get_matches() where name = 'Paula'")).rows[0].match_id;
+const sendMsg = (uid, cols) => as(uid,
+  `insert into public.messages (match_id, kind, body, media_url, media_meta) values ($1, $2, $3, $4, $5)`,
+  [MM, cols.kind, cols.body ?? '', cols.media_url ?? null, cols.media_meta ?? null]);
+
+await sendMsg(P1, { kind: 'image', media_url: `${MM}/foto.jpg`, media_meta: { width: 1080, height: 1350 } });
+ok(true, 'Envia foto (arquivo na pasta do match, sem texto)');
+await sendMsg(P2, { kind: 'audio', media_url: `${MM}/audio.m4a`, media_meta: { durationMs: 12000 } });
+ok(true, 'Envia áudio');
+await sendMsg(P1, { kind: 'gif', media_url: 'https://media2.giphy.com/media/abc/giphy.gif', media_meta: { width: 200, height: 150 } });
+ok(true, 'Envia GIF do GIPHY');
+await as(P1, `insert into public.messages (match_id, body) values ($1, 'texto continua igual')`, [MM]);
+ok(true, 'Mensagem de texto continua funcionando (tipo padrão)');
+
+await expectError('Foto apontando para a pasta de outro match é recusada',
+  () => sendMsg(P1, { kind: 'image', media_url: `00000000-0000-4000-8000-000000000999/x.jpg` }), 'check constraint');
+await expectError('GIF de fora do GIPHY é recusado',
+  () => sendMsg(P1, { kind: 'gif', media_url: 'https://site-qualquer.com/x.gif' }), 'check constraint');
+await expectError('Texto com mídia anexada é recusado', () => sendMsg(P1, { kind: 'text', body: 'oi', media_url: `${MM}/x.jpg` }), 'check constraint');
+await expectError('Tipo de mensagem inválido é recusado', () => sendMsg(P1, { kind: 'video', media_url: `${MM}/x.mp4` }), 'check constraint');
+
+// arquivos do chat: só as duas pessoas do match
+await as(P1, `insert into storage.objects (bucket_id, name) values ('chat-media', $1)`, [`${MM}/foto.jpg`]);
+ok(true, 'Pessoa do match envia arquivo para a pasta do match');
+await expectError('Quem é de fora não envia arquivo para o match',
+  () => as(B3, `insert into storage.objects (bucket_id, name) values ('chat-media', $1)`, [`${MM}/intruso.jpg`]), 'row-level security');
+const seenByP2 = await as(P2, "select name from storage.objects where bucket_id = 'chat-media'");
+ok(seenByP2.rows.length === 1, 'A outra pessoa do match vê o arquivo', seenByP2.rows.length);
+const seenByOutsider = await as(B3, "select name from storage.objects where bucket_id = 'chat-media'");
+ok(seenByOutsider.rows.length === 0, 'Quem é de fora não vê os arquivos do match');
+
+const preview = await as(P2, "select last_message from public.get_matches() where name = 'Paulo'");
+ok(preview.rows[0].last_message === 'texto continua igual', 'Prévia mostra o texto da última mensagem');
+await sendMsg(P2, { kind: 'audio', media_url: `${MM}/audio2.m4a`, media_meta: { durationMs: 5000 } });
+const preview2 = await as(P1, "select last_message from public.get_matches() where name = 'Paula'");
+ok(preview2.rows[0].last_message === '🎤 Áudio', 'Prévia da lista mostra "🎤 Áudio" para áudio', preview2.rows[0].last_message);
+
 console.log(failures ? `\n${failures} FALHA(S)` : '\nTODOS OS TESTES PASSARAM');
 process.exit(failures ? 1 : 0);

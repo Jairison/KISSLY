@@ -56,7 +56,8 @@ Deno.serve(async (req) => {
   }
 
   if (payload.table === 'messages') {
-    const { match_id, sender_id, body } = payload.record;
+    const { match_id, sender_id, body, kind } = payload.record;
+    const preview = kind === 'image' ? '📷 Foto' : kind === 'gif' ? 'GIF' : kind === 'audio' ? '🎤 Áudio' : body;
     const { data: match } = await db.from('matches').select('user_a, user_b').eq('id', match_id).single();
     if (match) {
       const recipient = match.user_a === sender_id ? match.user_b : match.user_a;
@@ -66,7 +67,7 @@ Deno.serve(async (req) => {
           messages.push({
             to,
             title: senderName,
-            body: body.length > 120 ? `${body.slice(0, 117)}…` : body,
+            body: preview.length > 120 ? `${preview.slice(0, 117)}…` : preview,
             data: { url: `/chat/${match_id}` },
             sound: 'default',
           });

@@ -8,7 +8,7 @@ import { LIMITS } from '@/data/plans';
 import { buildDeck, profiles as demoProfiles } from '@/data/profiles';
 import { grantDemoPlan, readDemoPlan } from '@/services/payments/demo';
 import { INVITE_REWARD, isInviteCodeShape, normalizeInviteCode } from '@/services/invites';
-import type { ChatEvents, Conversation, Message } from '@/types/chat';
+import { messagePreview, type ChatEvents, type Conversation, type Message } from '@/types/chat';
 import { BOOST_MINUTES, type NotificationSettings, type Passport, type VerificationStatus } from '@/types/extras';
 import { DEFAULT_PREFS, isPremium, type DiscoveryPrefs, type Plan, type Profile, type UserProfile } from '@/types/user';
 
@@ -96,7 +96,10 @@ function scheduleDemoReply(match: LocalMatch) {
         id: Crypto.randomUUID(),
         matchId: match.matchId,
         senderId: match.profile.id,
+        kind: 'text',
         body: reply,
+        mediaUrl: null,
+        mediaMeta: null,
         createdAt: new Date().toISOString(),
         readAt: null,
       },
@@ -296,7 +299,7 @@ export const localBackend: Backend = {
         matchId: m.matchId,
         matchedAt: m.matchedAt,
         profile: m.profile,
-        lastMessage: last?.body ?? null,
+        lastMessage: last ? messagePreview(last.kind, last.body) : null,
         lastMessageAt: last?.createdAt ?? null,
         lastFromMe: last ? last.senderId !== m.profile.id : false,
         unread: msgs.filter((msg) => msg.senderId === m.profile.id && !msg.readAt).length,
@@ -321,11 +324,30 @@ export const localBackend: Backend = {
     return (before ? all.filter((m) => m.createdAt < before) : all).slice(0, 30);
   },
 
-  async sendMessage({ id, matchId, body }) {
+  async uploadChatMedia(_matchId, localUri) {
+    // Na demonstração a mídia fica no aparelho (só nesta sessão).
+    return localUri;
+  },
+
+  async mediaUrl(pathOrUrl) {
+    return pathOrUrl;
+  },
+
+  async sendMessage({ id, matchId, kind, body, mediaUrl, mediaMeta }) {
     const account = requireAccount();
     const match = matches.find((m) => m.matchId === matchId);
     if (!match) throw new BackendError('Essa conversa não existe mais.');
-    const message: Message = { id, matchId, senderId: account.id, body, createdAt: new Date().toISOString(), readAt: null };
+    const message: Message = {
+      id,
+      matchId,
+      senderId: account.id,
+      kind,
+      body,
+      mediaUrl,
+      mediaMeta,
+      createdAt: new Date().toISOString(),
+      readAt: null,
+    };
     emitMessage(message, true);
     scheduleDemoReply(match);
     return message;

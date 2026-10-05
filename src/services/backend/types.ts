@@ -1,4 +1,4 @@
-import type { ChatChannel, ChatEvents, Conversation, Message, ReportReason } from '@/types/chat';
+import type { ChatChannel, ChatEvents, Conversation, Message, OutgoingMessage, ReportReason } from '@/types/chat';
 import type { BoostStatus, NotificationSettings, Passport, VerificationStatus } from '@/types/extras';
 import type { InviteInfo, RedeemResult } from '@/services/invites';
 import type { DiscoveryPrefs, DiscoveryScope, Plan, Profile, Usage, UserProfile } from '@/types/user';
@@ -80,7 +80,11 @@ export interface Backend {
   // ---- chat
   /** Mensagens mais recentes primeiro. Passe `before` (ISO) para carregar as anteriores. */
   fetchMessages(matchId: string, before?: string): Promise<Message[]>;
-  sendMessage(message: Pick<Message, 'id' | 'matchId' | 'body'>): Promise<Message>;
+  sendMessage(message: OutgoingMessage): Promise<Message>;
+  /** Envia uma foto/áudio do chat (arquivo local) e devolve o caminho no Storage. */
+  uploadChatMedia(matchId: string, localUri: string, kind: 'image' | 'audio', mimeType: string): Promise<string>;
+  /** Endereço para exibir/tocar a mídia (link temporário para arquivos privados). */
+  mediaUrl(pathOrUrl: string): Promise<string>;
   markRead(matchId: string): Promise<void>;
   /** Mensagens novas, confirmações de leitura e "digitando…" de uma conversa. */
   openChat(matchId: string, events: ChatEvents): ChatChannel;

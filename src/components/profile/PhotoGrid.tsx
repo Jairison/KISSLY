@@ -1,24 +1,19 @@
 import { useState } from 'react';
 import { ActivityIndicator, Platform, Pressable, StyleSheet, Text, View } from 'react-native';
 import { Image } from 'expo-image';
-import { ImageManipulator, SaveFormat } from 'expo-image-manipulator';
 import { LinearGradient } from 'expo-linear-gradient';
 import { Ionicons } from '@expo/vector-icons';
 
 import { useToast } from '@/components/Toast';
 import { colors, fonts, gradients, radii, spacing } from '@/theme';
 import { PHOTO_LIMITS } from '@/types/user';
+import { optimizeImage } from '@/utils/images';
 import { PermissionError, pickImages, type PickedImage } from '@/utils/pickImages';
 
 /** O Storage aceita até 5 MB por foto (bucket "photos"). */
 const MAX_ORIGINAL_BYTES = 4.5 * 1024 * 1024;
 
-/** Reduz a foto para 1080px de largura em JPEG, deixando leve para salvar e enviar. */
-async function optimize(uri: string): Promise<string> {
-  const image = await ImageManipulator.manipulate(uri).resize({ width: 1080 }).renderAsync();
-  const result = await image.saveAsync({ compress: 0.75, format: SaveFormat.JPEG });
-  return result.uri;
-}
+const optimize = async (uri: string) => (await optimizeImage(uri)).uri;
 
 type Props = {
   photos: string[];

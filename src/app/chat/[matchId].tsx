@@ -17,11 +17,18 @@ import { Image } from 'expo-image';
 import { LinearGradient } from 'expo-linear-gradient';
 import { Ionicons } from '@expo/vector-icons';
 
+import { AudioBubble } from '@/components/chat/AudioBubble';
+import { GifPicker } from '@/components/chat/GifPicker';
+import { MediaBubble } from '@/components/chat/MediaBubble';
+import { VoiceRecorder } from '@/components/chat/VoiceRecorder';
 import { useToast } from '@/components/Toast';
+import { ActionSheet } from '@/components/ui/ActionSheet';
 import { noWebOutline } from '@/components/ui/TextField';
 import { BackendError } from '@/services/backend';
 import { useAppState } from '@/state/AppState';
-import { useChat } from '@/state/useChat';
+import { useChat, type ChatDraft } from '@/state/useChat';
+import { optimizeImage } from '@/utils/images';
+import { PermissionError, pickImages } from '@/utils/pickImages';
 import { useMatchActions } from '@/state/useMatchActions';
 import { useCurrentUser } from '@/state/Session';
 import { colors, fonts, gradients, radii, spacing } from '@/theme';
@@ -37,6 +44,9 @@ export default function ChatScreen() {
   const chat = useChat(matchId, me.id);
   const actions = useMatchActions(conversation);
   const [draft, setDraft] = useState('');
+  const [recording, setRecording] = useState(false);
+  const [attachOpen, setAttachOpen] = useState(false);
+  const [gifOpen, setGifOpen] = useState(false);
   const inputRef = useRef<TextInput>(null);
 
   // Separadores de dia viram itens próprios da lista: numa lista invertida, cada item
@@ -69,16 +79,33 @@ export default function ChatScreen() {
   if (!conversation) return <View style={styles.screen} />;
   const { profile } = conversation;
 
-  const send = (body: string, retryId?: string) => {
-    chat.send(body, retryId).catch((e) =>
-      show(e instanceof BackendError ? e.message : 'Mensagem não enviada', 'cloud-offline-outline', colors.danger),
-    );
+  const notSent = (e: unknown) =>
+    show(e instanceof BackendError ? e.message : 'Mensagem não enviada', 'cloud-offline-outline', colors.danger);
+  const send = (content: ChatDraft) => {
+    chat.send(content).catch(notSent);
   };
 
   const submit = () => {
     if (!draft.trim()) return;
-    send(draft);
+    send({ kind: 'text', body: draft });
     setDraft('');
+  };
+
+  const sendPhoto = async (camera: boolean) => {
+    setAttachOpen(false);
+    try {
+      const picked = await pickImages({ limit: 1, camera });
+      if (!picked) return;
+      const photo = await optimizeImage(picked[0].uri, 1280).catch(() => null);
+      if (!photo) {
+        const heic = /hei[cf]/i.test(`${picked[0].mimeType} ${picked[0].fileName}`);
+        show(heic ? 'Fotos HEIC não abrem no navegador. Escolha uma foto JPG.' : 'Não foi possível usar essa foto.', 'image-outline', colors.danger);
+        return;
+      }
+      send({ kind: 'image', localUri: photo.uri, width: photo.width, height: photo.height });
+    } catch (e) {
+      show(e instanceof PermissionError ? 'Permita o acesso às fotos/câmera nas configurações.' : 'Não foi possível abrir as fotos.', 'images-outline', colors.danger);
+    }
   };
 
   // A mensagem minha mais recente mostra o status (Enviando / Enviada / Lida).
@@ -162,45 +189,89 @@ export default function ChatScreen() {
                   joinedAbove={!!older && older.senderId === message.senderId && isSameDay(older.createdAt, message.createdAt)}
                   joinedBelow={!!newer && newer.senderId === message.senderId && isSameDay(newer.createdAt, message.createdAt)}
                   showStatus={message.id === lastMineId}
-                  onRetry={() => send(message.body, message.id)}
+                  onRetry={() => chat.retry(message.id).catch(notSent)}
                 />
               );
             }}
           />
         )}
 
-        <View style={styles.composer}>
-          <TextInput
-            ref={inputRef}
-            value={draft}
-            onChangeText={(text) => {
-              setDraft(text);
-              if (text) chat.sendTyping();
-            }}
-            placeholder={`Mensagem para ${profile.name}…`}
-            placeholderTextColor={colors.textFaint}
-            selectionColor={colors.rose}
-            multiline
-            maxLength={MESSAGE_MAX}
-            style={[styles.input, noWebOutline]}
-            onKeyPress={(e) => {
-              // No navegador, Enter envia e Shift+Enter quebra a linha.
-              const native = e.nativeEvent as { key: string; shiftKey?: boolean };
-              if (Platform.OS === 'web' && native.key === 'Enter' && !native.shiftKey) {
-                e.preventDefault();
-                submit();
-              }
+        {recording ? (
+          <VoiceRecorder
+            onCancel={() => setRecording(false)}
+            onError={(msg) => show(msg, 'mic-off-outline', colors.danger)}
+            onSend={(audio) => {
+              setRecording(false);
+              send({ kind: 'audio', localUri: audio.uri, durationMs: audio.durationMs, mimeType: audio.mimeType });
             }}
           />
-          <Pressable onPress={submit} disabled={!draft.trim()} style={{ opacity: draft.trim() ? 1 : 0.4 }}>
-            <LinearGradient colors={gradients.brand} style={styles.send}>
-              <Ionicons name="arrow-up" size={22} color="#fff" />
-            </LinearGradient>
-          </Pressable>
-        </View>
+        ) : (
+          <View style={styles.composer}>
+            <Pressable onPress={() => setAttachOpen(true)} hitSlop={8} style={styles.attach} accessibilityLabel="Enviar foto ou GIF">
+              <Ionicons name="add" size={26} color={colors.rose} />
+            </Pressable>
+            <TextInput
+              ref={inputRef}
+              value={draft}
+              onChangeText={(text) => {
+                setDraft(text);
+                if (text) chat.sendTyping();
+              }}
+              placeholder={`Mensagem para ${profile.name}…`}
+              placeholderTextColor={colors.textFaint}
+              selectionColor={colors.rose}
+              multiline
+              maxLength={MESSAGE_MAX}
+              style={[styles.input, noWebOutline]}
+              onKeyPress={(e) => {
+                // No navegador, Enter envia e Shift+Enter quebra a linha.
+                const native = e.nativeEvent as { key: string; shiftKey?: boolean };
+                if (Platform.OS === 'web' && native.key === 'Enter' && !native.shiftKey) {
+                  e.preventDefault();
+                  submit();
+                }
+              }}
+            />
+            {draft.trim() ? (
+              <Pressable onPress={submit} accessibilityLabel="Enviar mensagem">
+                <LinearGradient colors={gradients.brand} style={styles.send}>
+                  <Ionicons name="arrow-up" size={22} color="#fff" />
+                </LinearGradient>
+              </Pressable>
+            ) : (
+              <Pressable onPress={() => setRecording(true)} accessibilityLabel="Gravar áudio" style={styles.mic}>
+                <Ionicons name="mic" size={22} color={colors.rose} />
+              </Pressable>
+            )}
+          </View>
+        )}
       </KeyboardAvoidingView>
 
       {actions.sheet}
+      <ActionSheet
+        visible={attachOpen}
+        onClose={() => setAttachOpen(false)}
+        actions={[
+          { label: 'Foto da galeria', icon: 'images-outline', onPress: () => sendPhoto(false) },
+          ...(Platform.OS === 'web' ? [] : [{ label: 'Tirar foto', icon: 'camera-outline' as const, onPress: () => sendPhoto(true) }]),
+          {
+            label: 'GIF',
+            icon: 'happy-outline',
+            onPress: () => {
+              setAttachOpen(false);
+              setGifOpen(true);
+            },
+          },
+        ]}
+      />
+      <GifPicker
+        visible={gifOpen}
+        onClose={() => setGifOpen(false)}
+        onPick={(gif) => {
+          setGifOpen(false);
+          send({ kind: 'gif', url: gif.url, width: gif.width, height: gif.height });
+        }}
+      />
     </SafeAreaView>
   );
 }
@@ -231,12 +302,23 @@ function Bubble({ message, mine, joinedAbove, joinedBelow, showStatus, onRetry }
     </>
   );
 
+  const media = message.kind === 'image' || message.kind === 'gif' ? (
+    <MediaBubble message={message} mine={mine} />
+  ) : message.kind === 'audio' ? (
+    <AudioBubble message={message} mine={mine} />
+  ) : null;
+
   return (
     <Animated.View
       entering={FadeInDown.duration(220)}
       style={[styles.bubbleRow, mine ? styles.rowMine : styles.rowTheirs, { marginTop: joinedAbove ? 2 : spacing.sm }]}
     >
-      {mine ? (
+      {media ? (
+        <Pressable onPress={failed ? onRetry : undefined} disabled={!failed} style={failed && styles.mediaFailed}>
+          {media}
+          <Text style={styles.mediaTime}>{formatClock(message.createdAt)}</Text>
+        </Pressable>
+      ) : mine ? (
         <Pressable onPress={failed ? onRetry : undefined} disabled={!failed}>
           <LinearGradient
             colors={failed ? [colors.surfaceRaised, colors.surfaceRaised] : gradients.brand}
@@ -333,6 +415,17 @@ const styles = StyleSheet.create({
     marginBottom: spacing.xs,
   },
   bubbleRow: { maxWidth: '80%' },
+  mediaFailed: { opacity: 0.6 },
+  mediaTime: { alignSelf: 'flex-end', fontFamily: fonts.regular, fontSize: 10, color: colors.textFaint, marginTop: 3, marginRight: 4 },
+  attach: { width: 36, height: 44, alignItems: 'center', justifyContent: 'center' },
+  mic: {
+    width: 44,
+    height: 44,
+    borderRadius: 22,
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: 'rgba(255,61,127,0.12)',
+  },
   rowMine: { alignSelf: 'flex-end', alignItems: 'flex-end' },
   rowTheirs: { alignSelf: 'flex-start', alignItems: 'flex-start' },
   bubble: {

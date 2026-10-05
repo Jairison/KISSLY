@@ -7,7 +7,7 @@ import type { AuthError, PostgrestError, SupabaseClient } from '@supabase/supaba
 
 import { flagFor } from '@/data/catalog';
 import { normalizeInviteCode, type RedeemResult } from '@/services/invites';
-import type { Conversation, Message } from '@/types/chat';
+import type { Conversation, MediaMeta, Message, MessageKind } from '@/types/chat';
 import type { Passport, VerificationStatus } from '@/types/extras';
 import { supabase as client } from '@/lib/supabase';
 import {
@@ -28,6 +28,10 @@ WebBrowser.maybeCompleteAuthSession();
 
 const BUCKET = 'photos';
 const PAGE_SIZE = 30;
+const CHAT_BUCKET = 'chat-media';
+const SIGNED_URL_SECONDS = 60 * 60;
+/** Links temporários já gerados (fotos e áudios privados do chat). */
+const signedUrls = new Map<string, { url: string; expires: number }>();
 
 /** Id de quem está logado, para saber de quem é cada mensagem do Realtime. */
 let currentUserId: string | null = null;
@@ -152,7 +156,10 @@ type MessageRow = {
   id: string;
   match_id: string;
   sender_id: string;
+  kind: MessageKind | null;
   body: string;
+  media_url: string | null;
+  media_meta: MediaMeta | null;
   created_at: string;
   read_at: string | null;
 };
@@ -161,7 +168,10 @@ const toMessage = (row: MessageRow): Message => ({
   id: row.id,
   matchId: row.match_id,
   senderId: row.sender_id,
+  kind: row.kind ?? 'text',
   body: row.body,
+  mediaUrl: row.media_url ?? null,
+  mediaMeta: row.media_meta ?? null,
   createdAt: row.created_at,
   readAt: row.read_at,
 });
@@ -511,14 +521,34 @@ export const supabaseBackend: Backend = {
     return (data as MessageRow[]).map(toMessage);
   },
 
-  async sendMessage({ id, matchId, body }) {
+  async sendMessage({ id, matchId, kind, body, mediaUrl, mediaMeta }) {
     const { data, error } = await db()
       .from('messages')
-      .insert({ id, match_id: matchId, body })
+      .insert({ id, match_id: matchId, kind, body, media_url: mediaUrl, media_meta: mediaMeta })
       .select('*')
       .single<MessageRow>();
     if (error) fail(error);
     return toMessage(data);
+  },
+
+  async uploadChatMedia(matchId, localUri, kind, mimeType) {
+    const ext = kind === 'image' ? 'jpg' : mimeType.includes('webm') ? 'webm' : mimeType.includes('ogg') ? 'ogg' : 'm4a';
+    const path = `${matchId}/${Crypto.randomUUID()}.${ext}`;
+    const { error } = await db()
+      .storage.from(CHAT_BUCKET)
+      .upload(path, await readBytes(localUri), { contentType: mimeType });
+    if (error) fail(error);
+    return path;
+  },
+
+  async mediaUrl(pathOrUrl) {
+    if (isRemote(pathOrUrl) || !pathOrUrl.includes('/') || /^(blob|file|data):/.test(pathOrUrl)) return pathOrUrl;
+    const cached = signedUrls.get(pathOrUrl);
+    if (cached && cached.expires > Date.now()) return cached.url;
+    const { data, error } = await db().storage.from(CHAT_BUCKET).createSignedUrl(pathOrUrl, SIGNED_URL_SECONDS);
+    if (error) fail(error);
+    signedUrls.set(pathOrUrl, { url: data.signedUrl, expires: Date.now() + (SIGNED_URL_SECONDS - 60) * 1000 });
+    return data.signedUrl;
   },
 
   async markRead(matchId) {
