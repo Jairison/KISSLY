@@ -3,7 +3,7 @@ import * as Crypto from 'expo-crypto';
 import { File } from 'expo-file-system';
 import * as Linking from 'expo-linking';
 import * as WebBrowser from 'expo-web-browser';
-import type { AuthError, PostgrestError, SupabaseClient } from '@supabase/supabase-js';
+import { FunctionsFetchError, FunctionsHttpError, type AuthError, type PostgrestError, type SupabaseClient } from '@supabase/supabase-js';
 
 import { flagFor } from '@/data/catalog';
 import { normalizeInviteCode, type RedeemResult } from '@/services/invites';
@@ -223,6 +223,17 @@ async function readBytes(uri: string): Promise<ArrayBuffer> {
   return new File(uri).arrayBuffer();
 }
 
+/** Apaga as fotos e áudios de uma conversa (antes de desfazer o match ou bloquear). */
+async function clearChatMedia(matchId: string) {
+  try {
+    const { data } = await db().storage.from(CHAT_BUCKET).list(matchId, { limit: 1000 });
+    const paths = (data ?? []).filter((f) => f.id).map((f) => `${matchId}/${f.name}`);
+    if (paths.length) await db().storage.from(CHAT_BUCKET).remove(paths);
+  } catch {
+    // Melhor esforço: sem o match, os arquivos já ficam inacessíveis.
+  }
+}
+
 /** Pede à moderação automática para analisar a foto. A recusada já volta apagada. */
 async function moderate(path: string): Promise<boolean> {
   const { data, error } = await db().functions.invoke('moderate-photo', { body: { path } });
@@ -377,12 +388,24 @@ export const supabaseBackend: Backend = {
   },
 
   async deleteAccount() {
+    // Preferência: a função do servidor, que apaga TODOS os arquivos (perfil, verificação e chat).
+    const { error: fnError } = await db().functions.invoke('delete-account', { method: 'POST' });
+    if (!fnError) {
+      await db().auth.signOut({ scope: 'local' }).catch(() => {});
+      return;
+    }
+    const notDeployed =
+      fnError instanceof FunctionsFetchError ||
+      (fnError instanceof FunctionsHttpError && (fnError.context as Response | undefined)?.status === 404);
+    if (!notDeployed) fail(new Error('Não foi possível excluir a conta agora. Tente de novo.'));
+
+    // Função ainda não publicada: apaga as fotos do perfil e a conta pelo banco.
     const userId = await requireUserId();
     const { data: files } = await db().storage.from(BUCKET).list(userId);
     if (files?.length) await db().storage.from(BUCKET).remove(files.map((f) => `${userId}/${f.name}`));
     const { error } = await db().rpc('delete_account');
     if (error) fail(error);
-    await db().auth.signOut({ scope: 'local' });
+    await db().auth.signOut({ scope: 'local' }).catch(() => {});
   },
 
   async loadProfile(account) {
@@ -602,6 +625,7 @@ export const supabaseBackend: Backend = {
   },
 
   async unmatch(matchId) {
+    await clearChatMedia(matchId);
     const { error } = await db().rpc('unmatch', { p_match: matchId });
     if (error) fail(error);
   },
@@ -612,6 +636,15 @@ export const supabaseBackend: Backend = {
   },
 
   async blockUser(profileId) {
+    // Se havia match, a conversa será apagada: apaga antes as fotos e áudios dela.
+    const me = await requireUserId();
+    const { data: match } = await db()
+      .from('matches')
+      .select('id')
+      .eq('user_a', me < profileId ? me : profileId)
+      .eq('user_b', me < profileId ? profileId : me)
+      .maybeSingle();
+    if (match) await clearChatMedia(match.id as string);
     const { error } = await db().rpc('block_user', { p_target: profileId });
     if (error) fail(error);
   },

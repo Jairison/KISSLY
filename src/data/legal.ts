@@ -9,7 +9,7 @@ export const COMPANY = {
   supportEmail: 'suporte@kissly.app',
 };
 
-export const LEGAL_UPDATED_AT = '2 de outubro de 2026';
+export const LEGAL_UPDATED_AT = '6 de outubro de 2026';
 
 export type LegalDoc = {
   title: string;
@@ -102,7 +102,9 @@ export const LEGAL_DOCS: Record<LegalDocId, LegalDoc> = {
       {
         heading: '4. Por quanto tempo guardamos',
         body: [
-          'Enquanto sua conta existir. Ao excluir a conta, apagamos perfil, fotos, matches e mensagens. Registros mínimos podem ser mantidos pelo prazo exigido por lei, como os registros de acesso previstos no Marco Civil da Internet (6 meses), e para a segurança da comunidade, como em casos de banimento.',
+          'Enquanto sua conta existir. Ao excluir a conta, apagamos seu perfil, fotos, selfie de verificação, matches e conversas, incluindo as fotos e áudios enviados nelas, para as duas pessoas. Ao desfazer um match ou bloquear alguém, a conversa e seus arquivos também são apagados.',
+          'Guardamos apenas o mínimo exigido por lei ou necessário à segurança: registros de acesso pelo prazo do Marco Civil da Internet (6 meses) e denúncias. Se você foi denunciado(a), a denúncia é mantida para a moderação com um resumo sem fotos (nome, idade, gênero e cidade na data da denúncia), mesmo após a exclusão da conta.',
+          'Assinaturas: o histórico de compras fica também com a Apple ou o Google e com o RevenueCat, que processam os pagamentos, conforme as políticas deles. Excluir a conta no Kissly não cancela a assinatura na loja.',
         ],
       },
       {

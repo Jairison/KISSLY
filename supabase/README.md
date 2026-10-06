@@ -37,6 +37,9 @@ um deve aparecer `Success. No rows returned`.
    segurança (fecha as funções internas do banco).
 10. [`20261010000000_photo_moderation.sql`](migrations/20261010000000_photo_moderation.sql): registro da
     moderação de fotos.
+11. [`20261011000000_chat_media.sql`](migrations/20261011000000_chat_media.sql): fotos, áudios e GIFs no chat.
+12. [`20261012000000_account_deletion.sql`](migrations/20261012000000_account_deletion.sql): exclusão completa
+    de dados (arquivos do chat e denúncias que sobrevivem à exclusão).
 
 Quando novas partes do app trouxerem arquivos novos nessa pasta, rode só os novos, também em ordem.
 
@@ -156,6 +159,21 @@ recusados; fotos de praia ou sem camisa passam normalmente.
 
 Sem as chaves, ou com a função fora do ar, as fotos são aceitas normalmente (a moderação fica desligada). As
 recusas ficam na tabela **photo_moderation**, para a equipe revisar quem insiste em enviar conteúdo proibido.
+
+## 10. Exclusão completa de conta
+
+A função [`delete-account`](functions/delete-account/index.ts) apaga **todos** os arquivos da pessoa (fotos do
+perfil, selfie de verificação, fotos e áudios das conversas) e depois a conta. Sem ela, o app ainda exclui a
+conta, mas os arquivos de chat e a selfie ficam no armazenamento.
+
+Ela é um arquivo único e pode ser publicada **pelo painel**, sem instalar nada:
+
+1. **Edge Functions** → **Deploy a new function** → **Via Editor**.
+2. Nome: `delete-account`. Apague o exemplo, cole o conteúdo do arquivo e clique em **Deploy function**.
+3. Deixe **Verify JWT** ligado (padrão): só a própria pessoa logada consegue se excluir.
+
+As denúncias continuam registradas depois que alguém exclui a conta, só com um resumo mínimo
+(`reported_snapshot`: nome, idade, gênero e cidade na data da denúncia).
 
 ## Como os dados ficam protegidos
 

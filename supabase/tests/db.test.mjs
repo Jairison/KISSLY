@@ -547,5 +547,33 @@ await sendMsg(P2, { kind: 'audio', media_url: `${MM}/audio2.m4a`, media_meta: { 
 const preview2 = await as(P1, "select last_message from public.get_matches() where name = 'Paula'");
 ok(preview2.rows[0].last_message === '🎤 Áudio', 'Prévia da lista mostra "🎤 Áudio" para áudio', preview2.rows[0].last_message);
 
+// ---------------------------------------------------------------- exclusão completa
+// Paulo (P1) e Paula (P2) têm match MM com arquivos em chat-media; B3 é de fora.
+await expectError('Quem é de fora não apaga arquivos do match',
+  async () => {
+    const r = await as(B3, "delete from storage.objects where bucket_id = 'chat-media' returning name");
+    if (r.rows.length === 0) throw new Error('nada apagado, como esperado');
+  }, 'nada apagado');
+const removed = await as(P2, "delete from storage.objects where bucket_id = 'chat-media' and name like $1 returning name", [`${MM}/%`]);
+ok(removed.rows.length >= 1, 'Pessoa do match apaga os arquivos da conversa (desfazer/bloquear)', removed.rows.length);
+
+// Denúncia sobrevive à exclusão das duas contas, com um resumo mínimo
+const R1 = 'e1e1e1e1-0000-4000-8000-000000000001'; // denuncia
+const R2 = 'e2e2e2e2-0000-4000-8000-000000000002'; // é denunciado e depois exclui a conta
+await db.exec(`insert into auth.users (id, email) values ('${R1}', 'r1@test.dev'), ('${R2}', 'r2@test.dev');`);
+const inBH = `insert into public.profiles (id, name, birthdate, gender, show_me, photos, city, state, country)
+  values ($1, $2, '1990-05-05', 'man', 'women', array['a','b'], 'Belo Horizonte', 'MG', 'Brasil')`;
+await as(R1, inBH, [R1, 'Rita']);
+await as(R2, inBH, [R2, 'Rogério']);
+await as(R1, "insert into public.reports (reported_id, reason, details) values ($1, 'harassment', 'mensagens ofensivas')", [R2]);
+await as(R2, 'select public.delete_account()');
+await as(R1, 'select public.delete_account()');
+const kept = await db.query("select reporter_id, reported_id, reason, details, reported_snapshot from public.reports where details = 'mensagens ofensivas'");
+ok(kept.rows.length === 1, 'A denúncia continua registrada depois que as duas contas são excluídas');
+ok(kept.rows[0]?.reporter_id === null && kept.rows[0]?.reported_id === null, 'Os ids das contas excluídas são apagados da denúncia');
+ok(kept.rows[0]?.reported_snapshot?.name === 'Rogério' && kept.rows[0]?.reported_snapshot?.city === 'Belo Horizonte' && !('photos' in (kept.rows[0]?.reported_snapshot ?? {})),
+  'Fica só um resumo mínimo de quem foi denunciado (sem fotos)', JSON.stringify(kept.rows[0]?.reported_snapshot));
+await expectError('Ninguém chama a função do resumo diretamente', () => as(B3, 'select public.snapshot_reported()'), 'permission denied');
+
 console.log(failures ? `\n${failures} FALHA(S)` : '\nTODOS OS TESTES PASSARAM');
 process.exit(failures ? 1 : 0);
