@@ -10,9 +10,6 @@ import { PHOTO_LIMITS } from '@/types/user';
 import { optimizeImage } from '@/utils/images';
 import { PermissionError, pickImages, type PickedImage } from '@/utils/pickImages';
 
-/** O Storage aceita até 5 MB por foto (bucket "photos"). */
-const MAX_ORIGINAL_BYTES = 4.5 * 1024 * 1024;
-
 const optimize = async (uri: string) => (await optimizeImage(uri)).uri;
 
 type Props = {
@@ -55,8 +52,8 @@ export function PhotoGrid({ photos, onChange }: Props) {
       } catch {
         const isHeic = /hei[cf]/i.test(`${asset.mimeType ?? ''} ${asset.fileName ?? ''}`);
         if (isHeic && Platform.OS === 'web') heic++;
-        // Sem conseguir otimizar, usa a original se ela couber no limite de envio.
-        else if (!asset.fileSize || asset.fileSize <= MAX_ORIGINAL_BYTES) picked.push(asset.uri);
+        // Nunca envia a original: só a cópia otimizada sai sem os dados ocultos da foto
+        // (como a localização do GPS gravada pela câmera).
         else failed++;
       }
     }

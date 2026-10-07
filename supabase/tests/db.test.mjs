@@ -47,6 +47,18 @@ for (const file of fs.readdirSync(`${ROOT}/migrations`).sort()) {
   await db.exec(fs.readFileSync(`${ROOT}/migrations/${file}`, 'utf8'));
   ok(true, `migração ${file}`);
 }
+// Só para os testes: cria 2 fotos de verdade no armazenamento da pessoa e devolve os endereços
+// (o banco recusa fotos que não estejam no Storage do Kissly, na pasta da própria pessoa).
+await db.exec(`
+  create function public.t_photos(p_user uuid) returns text[] language plpgsql security definer as $fn$
+  begin
+    insert into storage.objects (bucket_id, name)
+    select 'photos', p_user || '/' || n || '.jpg' from generate_series(1, 2) n
+    where not exists (select 1 from storage.objects o where o.bucket_id = 'photos' and o.name = p_user || '/' || n || '.jpg');
+    return array(select 'https://teste.supabase.co/storage/v1/object/public/photos/' || p_user || '/' || n || '.jpg' from generate_series(1, 2) n);
+  end $fn$;
+  grant execute on function public.t_photos(uuid) to authenticated;`);
+
 // Antes de qualquer coisa rodar como administrador: um usuário comum cria o perfil.
 // (O Postgres guarda em cache a checagem de permissão das funções dentro da sessão; se o
 // administrador usar a função primeiro, um usuário sem permissão passaria despercebido.)
@@ -56,7 +68,7 @@ for (const file of fs.readdirSync(`${ROOT}/migrations`).sort()) {
   await db.exec(`reset role; select set_config('request.jwt.claim.sub', '${U0}', false); set role authenticated;`);
   try {
     await db.query(`insert into public.profiles (id, name, birthdate, gender, show_me, photos, city, state, country)
-      values ($1, 'Primeiro', '1990-01-01', 'man', 'women', array['a','b'], 'Natal', 'RN', 'Brasil')`, [U0]);
+      values ($1, 'Primeiro', '1990-01-01', 'man', 'women', public.t_photos($1::uuid), 'Natal', 'RN', 'Brasil')`, [U0]);
     ok(true, 'Usuário comum cria o perfil logo após as migrações (sem cache de administrador)');
   } catch (e) {
     ok(false, 'Usuário comum cria o perfil logo após as migrações (sem cache de administrador)', e.message);
@@ -93,7 +105,7 @@ async function expectError(label, fn, match) {
 }
 
 const insertProfile = `insert into public.profiles (id, name, birthdate, gender, show_me, bio, interests, photos, city, state, country, lat, lng)
-  values ($1, $2, $3, $4, $5, 'oi', array['Café'], array['a','b'], 'São Paulo', 'SP', 'Brasil', -23.5505, -46.6333)`;
+  values ($1, $2, $3, $4, $5, 'oi', array['Café'], public.t_photos($1::uuid), 'São Paulo', 'SP', 'Brasil', -23.5505, -46.6333)`;
 
 await expectError('menor de 18 é bloqueado no banco',
   () => as(U1, insertProfile, [U1, 'Teen', new Date(Date.now() - 17 * 365.25 * 864e5).toISOString().slice(0, 10), 'man', 'women']),
@@ -172,9 +184,9 @@ await expectError('Não pode enviar foto na pasta de outra pessoa',
 await as(U1, `insert into storage.objects (bucket_id, name) values ('photos', '${U1}/x.jpg')`);
 ok(true, 'Pode enviar foto na própria pasta');
 const ownPhotos = await as(U1, "select name from storage.objects where bucket_id = 'photos'");
-ok(ownPhotos.rows.length === 1, 'Lista as próprias fotos (necessário para conseguir apagá-las)', ownPhotos.rows.length);
+ok(ownPhotos.rows.length === 3, 'Lista as próprias fotos (necessário para conseguir apagá-las)', ownPhotos.rows.length);
 const othersPhotos = await as(U2, "select name from storage.objects where bucket_id = 'photos'");
-ok(othersPhotos.rows.length === 0, 'Não lista as fotos de outras pessoas', othersPhotos.rows.length);
+ok(othersPhotos.rows.every((r) => r.name.startsWith(`${U2}/`)), 'Não lista as fotos de outras pessoas', othersPhotos.rows.map((r) => r.name).join(', '));
 
 // ------------------------------------------------------------------ chat
 const U3 = '33333333-3333-4333-8333-333333333333'; // intruso, fora do match
@@ -373,7 +385,7 @@ const B2 = 'b2b2b2b2-0000-4000-8000-000000000002'; // mulher, quer homens
 const B3 = 'b3b3b3b3-0000-4000-8000-000000000003'; // mulher, quer homens
 await db.exec(`insert into auth.users (id, email) values ('${B1}', 'b1@test.dev'), ('${B2}', 'b2@test.dev'), ('${B3}', 'b3@test.dev');`);
 const placeIn = `insert into public.profiles (id, name, birthdate, gender, show_me, photos, city, state, country)
-  values ($1, $2, '1994-01-01', $3, $4, array['a','b'], 'Manaus', 'AM', 'Brasil')`;
+  values ($1, $2, '1994-01-01', $3, $4, public.t_photos($1::uuid), 'Manaus', 'AM', 'Brasil')`;
 await as(B1, placeIn, [B1, 'Bruno', 'man', 'women']);
 await as(B2, placeIn, [B2, 'Bia', 'woman', 'men']);
 await as(B3, placeIn, [B3, 'Bel', 'woman', 'men']);
@@ -414,7 +426,7 @@ const P1 = 'c1c1c1c1-0000-4000-8000-000000000001';
 const P2 = 'c2c2c2c2-0000-4000-8000-000000000002';
 await db.exec(`insert into auth.users (id, email) values ('${P1}', 'p1@test.dev'), ('${P2}', 'p2@test.dev');`);
 const inRecife = `insert into public.profiles (id, name, birthdate, gender, show_me, photos, city, state, country)
-  values ($1, $2, '1994-01-01', $3, $4, array['a','b'], 'Recife', 'PE', 'Brasil')`;
+  values ($1, $2, '1994-01-01', $3, $4, public.t_photos($1::uuid), 'Recife', 'PE', 'Brasil')`;
 await as(P1, inRecife, [P1, 'Paulo', 'man', 'women']);
 await as(P2, inRecife, [P2, 'Paula', 'woman', 'men']);
 
@@ -450,7 +462,7 @@ const I0 = 'd0d0d0d0-0000-4000-8000-000000000000'; // quem convida
 const friends = [1, 2, 3, 4].map((n) => `d${n}d${n}d${n}d${n}-0000-4000-8000-00000000000${n}`);
 await db.exec(`insert into auth.users (id, email) values ${[I0, ...friends].map((id, i) => `('${id}', 'inv${i}@test.dev')`).join(', ')};`);
 const inCuritiba = `insert into public.profiles (id, name, birthdate, gender, show_me, photos, city, state, country)
-  values ($1, $2, '1994-01-01', 'woman', 'men', array['a','b'], 'Curitiba', 'PR', 'Brasil')`;
+  values ($1, $2, '1994-01-01', 'woman', 'men', public.t_photos($1::uuid), 'Curitiba', 'PR', 'Brasil')`;
 await as(I0, inCuritiba, [I0, 'Iara']);
 for (const [i, f] of friends.entries()) await as(f, inCuritiba, [f, `Amiga${i + 1}`]);
 
@@ -562,7 +574,7 @@ const R1 = 'e1e1e1e1-0000-4000-8000-000000000001'; // denuncia
 const R2 = 'e2e2e2e2-0000-4000-8000-000000000002'; // é denunciado e depois exclui a conta
 await db.exec(`insert into auth.users (id, email) values ('${R1}', 'r1@test.dev'), ('${R2}', 'r2@test.dev');`);
 const inBH = `insert into public.profiles (id, name, birthdate, gender, show_me, photos, city, state, country)
-  values ($1, $2, '1990-05-05', 'man', 'women', array['a','b'], 'Belo Horizonte', 'MG', 'Brasil')`;
+  values ($1, $2, '1990-05-05', 'man', 'women', public.t_photos($1::uuid), 'Belo Horizonte', 'MG', 'Brasil')`;
 await as(R1, inBH, [R1, 'Rita']);
 await as(R2, inBH, [R2, 'Rogério']);
 await as(R1, "insert into public.reports (reported_id, reason, details) values ($1, 'harassment', 'mensagens ofensivas')", [R2]);
@@ -574,6 +586,44 @@ ok(kept.rows[0]?.reporter_id === null && kept.rows[0]?.reported_id === null, 'Os
 ok(kept.rows[0]?.reported_snapshot?.name === 'Rogério' && kept.rows[0]?.reported_snapshot?.city === 'Belo Horizonte' && !('photos' in (kept.rows[0]?.reported_snapshot ?? {})),
   'Fica só um resumo mínimo de quem foi denunciado (sem fotos)', JSON.stringify(kept.rows[0]?.reported_snapshot));
 await expectError('Ninguém chama a função do resumo diretamente', () => as(B3, 'select public.snapshot_reported()'), 'permission denied');
+
+// ---------------------------------------------------------------- privacidade
+// 1) Localização arredondada (~1 km): impede triangulação pela distância.
+const snapped = await db.query('select lat, lng from public.profiles where id = $1', [U1]);
+ok(snapped.rows[0].lat === -23.55 && snapped.rows[0].lng === -46.63, 'A localização salva é arredondada para ~1 km', JSON.stringify(snapped.rows[0]));
+await as(U1, 'update public.profiles set lat = -23.561234, lng = -46.655678 where id = $1', [U1]);
+const moved = await db.query('select lat, lng from public.profiles where id = $1', [U1]);
+ok(moved.rows[0].lat === -23.56 && moved.rows[0].lng === -46.66, 'Atualizar a localização também arredonda', JSON.stringify(moved.rows[0]));
+await as(U1, `insert into public.passports (user_id, city, state, country, lat, lng) values ($1, 'Lisboa', 'Lisboa', 'Portugal', 38.72231, -9.13934)`, [U1]);
+const pass = await db.query('select lat, lng from public.passports where user_id = $1', [U1]);
+ok(pass.rows[0].lat === 38.72 && pass.rows[0].lng === -9.14, 'O Passaporte também é arredondado', JSON.stringify(pass.rows[0]));
+await as(U1, 'delete from public.passports where user_id = $1', [U1]);
+
+// 2) Fotos do perfil: só arquivos do Storage do Kissly, na pasta da própria pessoa.
+const okPhotos = (await as(U1, 'select public.t_photos($1::uuid) p', [U1])).rows[0].p;
+const setPhotos = (arr) => as(U1, 'update public.profiles set photos = $2 where id = $1', [U1, arr]);
+await expectError('Foto com link externo é recusada', () => setPhotos([okPhotos[0], 'https://rastreador.example/pixel.jpg']), 'Foto inválida');
+await expectError('Link externo disfarçado de supabase.co é recusado',
+  () => setPhotos([okPhotos[0], `https://evil.com/x.supabase.co/storage/v1/object/public/photos/${U1}/1.jpg`]), 'Foto inválida');
+await expectError('Foto da pasta de outra pessoa é recusada',
+  () => setPhotos([okPhotos[0], `https://teste.supabase.co/storage/v1/object/public/photos/${U2}/1.jpg`]), 'Foto inválida');
+await expectError('Foto que não existe no armazenamento é recusada',
+  () => setPhotos([okPhotos[0], `https://teste.supabase.co/storage/v1/object/public/photos/${U1}/nao-existe.jpg`]), 'arquivo não encontrado');
+await expectError('Caminho com ../ é recusado',
+  () => setPhotos([okPhotos[0], `https://teste.supabase.co/storage/v1/object/public/photos/${U1}/../${U2}/1.jpg`]), 'Foto inválida');
+await setPhotos([okPhotos[1], okPhotos[0], `https://teste.supabase.co/storage/v1/object/public/photos/${U1}/x.jpg`]);
+ok(true, 'Fotos enviadas pelo app (na própria pasta) são aceitas');
+// Com o endereço do projeto configurado, só esse projeto vale.
+await db.exec("insert into public.app_settings (key, value) values ('storage_public_url', 'https://meuprojeto.supabase.co')");
+await expectError('Com o projeto configurado, outro projeto supabase.co é recusado', () => setPhotos(okPhotos), 'Foto inválida');
+await setPhotos(okPhotos.map((u) => u.replace('https://teste.', 'https://meuprojeto.')));
+ok(true, 'Com o projeto configurado, as fotos dele são aceitas');
+await as(U1, "update public.profiles set bio = 'nova bio' where id = $1", [U1]);
+ok(true, 'Editar outros campos não revalida as fotos');
+await expectError('Ninguém mexe nas configurações pelo app',
+  () => as(U1, "update public.app_settings set value = 'https://evil.com'"), 'permission denied');
+await expectError('Ninguém chama a checagem de fotos diretamente', () => as(U1, 'select public.check_profile_photos()'), 'permission denied');
+await db.exec("delete from public.app_settings");
 
 console.log(failures ? `\n${failures} FALHA(S)` : '\nTODOS OS TESTES PASSARAM');
 process.exit(failures ? 1 : 0);

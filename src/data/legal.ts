@@ -78,7 +78,7 @@ export const LEGAL_DOCS: Record<LegalDocId, LegalDoc> = {
         heading: '1. Dados que coletamos',
         body: [
           'Cadastro: e-mail, senha (guardada de forma criptografada), nome, data de nascimento, gênero e quem você quer conhecer.',
-          'Perfil: fotos, bio, profissão, interesses e cidade. A localização exata do GPS é usada só para calcular distâncias e nunca é exibida para outras pessoas.',
+          'Perfil: fotos, bio, profissão, interesses e cidade. Sua localização é guardada de forma aproximada (cerca de 1 km), usada só para calcular distâncias e nunca é exibida para outras pessoas. As fotos são enviadas sem os dados ocultos gravados pela câmera, como o local onde foram tiradas.',
           'Uso: curtidas, matches, mensagens, denúncias, plano assinado e dados técnicos do aparelho (como o token de notificações).',
           'Verificação: a selfie enviada para verificar o perfil, vista apenas pela equipe de segurança.',
           'Dados sensíveis: informações sobre vida sexual ou orientação podem ser inferidas do uso do app. Elas são tratadas com base no seu consentimento, apenas para o funcionamento do serviço.',

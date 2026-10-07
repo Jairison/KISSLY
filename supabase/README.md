@@ -40,6 +40,10 @@ um deve aparecer `Success. No rows returned`.
 11. [`20261011000000_chat_media.sql`](migrations/20261011000000_chat_media.sql): fotos, áudios e GIFs no chat.
 12. [`20261012000000_account_deletion.sql`](migrations/20261012000000_account_deletion.sql): exclusão completa
     de dados (arquivos do chat e denúncias que sobrevivem à exclusão).
+13. [`20261013000000_privacy_hardening.sql`](migrations/20261013000000_privacy_hardening.sql): privacidade
+    (localização aproximada e fotos do perfil só do armazenamento do Kissly). Depois dela, rode também, trocando
+    pelo endereço do seu projeto:
+    `insert into public.app_settings (key, value) values ('storage_public_url', 'https://xxxx.supabase.co');`
 
 Quando novas partes do app trouxerem arquivos novos nessa pasta, rode só os novos, também em ordem.
 
@@ -184,6 +188,9 @@ As denúncias continuam registradas depois que alguém exclui a conta, só com u
   curtiu sem ter o plano Gold.
 - O plano de cada pessoa fica numa tabela que o app não consegue alterar. Na Parte 5, ela será atualizada
   pelo sistema de pagamentos.
-- Cada pessoa só envia e apaga fotos na própria pasta.
+- Cada pessoa só envia e apaga fotos na própria pasta, e o perfil só aceita fotos que estejam lá (nada de
+  links externos que driblam a moderação ou rastreiam quem abre o perfil).
+- A localização é guardada arredondada (cerca de 1 km): mesmo medindo distâncias de vários lugares, ninguém
+  descobre onde a pessoa mora. As fotos saem do aparelho sem os dados ocultos da câmera (como o GPS).
 - **Excluir conta** (no Perfil) apaga as fotos, o perfil, os matches e o login. A App Store e o Google Play
   exigem essa opção.
